@@ -278,6 +278,7 @@ Double-click any word to look it up on the right."></textarea>
     <div class="toolbar">
       <button class="btn primary" id="copyBtn">Copy to clipboard</button>
       <button class="btn" id="exportBtn" title="Download this draft as a color-coded PNG">Export image</button>
+      <button class="btn" id="downloadBtn" title="Download this draft as a .txt file">Save .txt</button>
       <label class="mtoggle" title="Color-code rhyme families"><input type="checkbox" id="rhymeToggle" checked> rhyme</label>
       <label class="mtoggle" title="Sheet music for your flow — syllable emphasis dots under each word"><input type="checkbox" id="stressToggle"> rhythm</label>
       <label class="mtoggle" title="Underline words that share an initial sound"><input type="checkbox" id="allitToggle"> alliteration</label>
@@ -941,6 +942,39 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
     setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
     flash('exportBtn', 'Exported \u2713');
   });
+});
+
+/* ============================================================
+   FILES IN, FILES OUT — drafts shouldn't be hostage to localStorage
+============================================================ */
+function draftFilename(){
+  const doc = docsState.docs.find(d=>d.id===docsState.current);
+  return (((doc && doc.title && doc.title !== 'Untitled') ? doc.title : 'rhymepad')
+    .replace(/[^\w\- ]+/g, '').trim() || 'rhymepad') + '.txt';
+}
+document.getElementById('downloadBtn').addEventListener('click', ()=>{
+  if(!editor.value.trim()) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([editor.value], {type: 'text/plain'}));
+  a.download = draftFilename();
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+  flash('downloadBtn', 'Saved \u2713');
+});
+// drop a .txt (or any text file) anywhere -> it becomes a new draft
+document.addEventListener('dragover', e=>{ e.preventDefault(); });
+document.addEventListener('drop', async e=>{
+  e.preventDefault();
+  const files = [...(e.dataTransfer?.files || [])].slice(0, 8);
+  for(const f of files){
+    if(f.size > 1024 * 1024) continue;
+    const text = await f.text();
+    if(!text.trim()) continue;
+    const id = newId();
+    docsState.docs.push({id, title: titleOf(text)});
+    localStorage.setItem(docKey(id), text);
+    openDoc(id);
+  }
 });
 
 /* ============================================================
