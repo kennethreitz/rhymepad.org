@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RhymePad — a scratchpad for poets &amp; rappers</title>
-<meta name="description" content="Write lyrics and poems with live phonetic rhyme detection — internal rhymes, multisyllabics, multi-word mosaics — plus a dictionary, beats, and meter check.">
+<meta name="description" content="Write lyrics and poems with live phonetic rhyme detection — internal rhymes, multisyllabics, multi-word mosaics — plus rhyme & synonym lookup, beats, and meter check.">
 <meta property="og:title" content="RhymePad">
 <meta property="og:description" content="A scratchpad that color-codes your rhyme schemes as you write. Real phonetic analysis: internal rhymes, slant rhymes, multi-word mosaics. Yes, it knows orange rhymes with door hinge.">
 <meta property="og:type" content="website">
@@ -198,18 +198,11 @@
     border-radius: 10px; padding: 12px 14px; margin: 10px 0 4px;
   }
   .defhead { display: flex; align-items: baseline; gap: 8px; font-size: 14px; }
-  .defhead .phon { color: var(--ink-dim); font-size: 12px; }
   .defx { margin-left: auto; cursor: pointer; color: var(--ink-dim); font-size: 15px; }
   .defx:hover { color: var(--r6); }
-  .defs { margin: 8px 0 10px; padding-left: 18px; font-size: 13px; line-height: 1.55; }
-  .defs li { margin: 4px 0; }
-  .defs i {
-    color: var(--accent-2); font-style: normal; font-size: 11px;
-    text-transform: uppercase; letter-spacing: .06em; margin-right: 4px;
-  }
   .btn.small { padding: 5px 10px; font-size: 12px; }
   .def-actions { display: flex; gap: 8px; }
-  .defphon { font-size: 12px; margin: 0 0 10px; line-height: 1.6; }
+  .defphon { font-size: 12px; margin: 8px 0 10px; line-height: 1.6; }
   .defphon i { color: var(--accent-2); font-style: normal; }
   .chip {
     font-size: 13px; background: var(--panel-2); border: 1px solid var(--line);
@@ -217,6 +210,8 @@
     transition: all .12s;
   }
   .chip:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+  .chip.common { font-weight: 600; }
+  .chip.rare { color: var(--ink-dim); opacity: .75; }
   .chip.near { border-style: dashed; color: var(--ink-dim); }
   .chip.near:hover { color: var(--accent); }
   .muted { color: var(--ink-dim); font-size: 13px; line-height: 1.6; }
@@ -286,7 +281,7 @@ Double-click any word to look it up on the right."></textarea>
   <!-- PANEL -->
   <aside>
     <div class="tabs">
-      <button class="tab active" data-tab="lookup">Dictionary</button>
+      <button class="tab active" data-tab="lookup">Rhymes &amp; words</button>
       <button class="tab" data-tab="beats">Beats</button>
     </div>
 
@@ -301,7 +296,7 @@ Double-click any word to look it up on the right."></textarea>
       </div>
       <div id="defBox"></div>
       <div id="lookupResults">
-        <p class="muted">Type a word and hit Go, or double-click a word in your draft. Its definition pins on top; the buttons switch rhymes, near rhymes, and synonyms.</p>
+        <p class="muted">Type a word and hit Go, or double-click a word in your draft. A phonetic readout pins on top; the buttons switch rhymes and synonyms.</p>
       </div>
     </div>
 
@@ -676,10 +671,17 @@ async function doLookup(){
   }
 }
 
-function chipHtml(words, cls){
+function rarity(z){
+  if(z == null) return '';
+  return z >= 4.6 ? ' common' : (z < 3.4 ? ' rare' : '');
+}
+function chipHtml(items, cls){
+  // items: strings or {word, z}
   return '<div class="results">' +
-    words.map(w=>`<span class="chip${cls ? ' ' + cls : ''}" data-w="${esc(w)}">${esc(w)}</span>`).join('') +
-    '</div>';
+    items.map(d=>{
+      const w = d.word || d, r = rarity(d.z);
+      return `<span class="chip${cls ? ' ' + cls : ''}${r}" data-w="${esc(w)}">${esc(w)}</span>`;
+    }).join('') + '</div>';
 }
 function wireChips(){
   // clicking a result navigates to that word's dictionary entry
@@ -691,22 +693,9 @@ function wireChips(){
   });
 }
 
-/* ---------- definition card (free dictionary API) ---------- */
+/* ---------- word card: the engine's own read on a word ---------- */
 const defBox = document.getElementById('defBox');
 let defWord = null, defDismissed = false;
-function defCard(word, inner){
-  defBox.innerHTML = `
-    <div class="defcard">
-      <div class="defhead"><b>${esc(word)}</b><span class="phon" id="defPhon"></span>
-        <span class="defx" title="Dismiss">×</span></div>
-      ${inner}
-      <div class="def-actions">
-        <button class="btn small" id="defInsert">Insert at cursor</button>
-      </div>
-    </div>`;
-  defBox.querySelector('#defInsert').addEventListener('click', ()=> insertAtCursor(word));
-  defBox.querySelector('.defx').addEventListener('click', ()=>{ defBox.innerHTML=''; defDismissed = true; });
-}
 function draftMates(word){
   if(!analysis) return [];
   const lw = word.toLowerCase();
@@ -724,35 +713,24 @@ function draftMates(word){
 }
 
 async function showDefinition(word){
-  defCard(word, '<p class="muted">Looking it up…</p>');
-  // phonetic anatomy + draft cross-reference, fetched alongside
-  fetch(`/api/word?word=${encodeURIComponent(word)}`).then(r=>r.json()).then(info=>{
-    const box = defBox.querySelector('.defcard');
-    if(!box || !info.known) return;
+  defBox.innerHTML = `<div class="defcard"><div class="defhead"><b>${esc(word)}</b>` +
+    `<span class="defx" title="Dismiss">×</span></div>` +
+    `<div class="muted defphon" id="defPhon"></div>` +
+    `<div class="def-actions"><button class="btn small" id="defInsert">Insert at cursor</button></div></div>`;
+  defBox.querySelector('#defInsert').addEventListener('click', ()=> insertAtCursor(word));
+  defBox.querySelector('.defx').addEventListener('click', ()=>{ defBox.innerHTML=''; defDismissed = true; });
+  try{
+    const info = await (await fetch(`/api/word?word=${encodeURIComponent(word)}`)).json();
+    const el = defBox.querySelector('#defPhon');
+    if(!el) return;
+    if(!info.known){ el.textContent = "not in the pronunciation dictionary"; return; }
     const dots = [...info.stress].map(s=>s==='1' ? '●' : '○').join('');
     const mates = draftMates(word);
-    const div = document.createElement('div');
-    div.className = 'muted defphon';
-    div.innerHTML = `/${esc(info.phones.toLowerCase())}/ · ${info.syl} syl ${dots}` +
+    el.innerHTML = `/${esc(info.phones.toLowerCase())}/ · ${info.syl} syl ${dots}` +
       ` · rhymes on <i>${esc(info.rime.toLowerCase())}</i>` +
+      ((info.homophones || []).length ? `<br>sounds like: ${info.homophones.map(esc).join(', ')}` : '') +
       (mates.length ? `<br>in your draft: ${mates.map(esc).join(', ')}` : '');
-    box.insertBefore(div, box.querySelector('.def-actions'));
-  }).catch(()=>{});
-  try{
-    const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
-    if(!r.ok) throw new Error('no entry');
-    const entry = (await r.json())[0];
-    const phon = (entry.phonetics || []).map(p=>p.text).find(Boolean) || '';
-    const defs = [];
-    (entry.meanings || []).forEach(m=>{
-      (m.definitions || []).slice(0, 2).forEach(d=> defs.push({pos: m.partOfSpeech, def: d.definition}));
-    });
-    const items = defs.slice(0, 4).map(d=>`<li><i>${esc(d.pos || '')}</i>${esc(d.def)}</li>`).join('');
-    defCard(word, `<ol class="defs">${items}</ol>`);
-    if(phon) defBox.querySelector('#defPhon').textContent = phon;
-  }catch(e){
-    defCard(word, '<p class="muted">No dictionary entry found.</p>');
-  }
+  }catch(e){}
 }
 function renderChips(label, words){
   if(!words.length){ resultsBox.innerHTML = '<p class="muted">No results.</p>'; return; }
@@ -772,7 +750,7 @@ function renderSections(word, sections){
 
 function syllableSections(items, cls){
   const bySyl = {};
-  items.forEach(d=>{ (bySyl[d.syl || 0] ||= []).push(d.word); });
+  items.forEach(d=>{ (bySyl[d.syl || 0] ||= []).push(d); });
   return Object.keys(bySyl).sort((a,b)=>a-b).map(k=>
     `<div class="res-label">${k == 0 ? '?' : k} syllable${k == 1 ? '' : 's'}</div>` + chipHtml(bySyl[k], cls)
   ).join('');

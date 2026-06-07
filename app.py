@@ -1089,8 +1089,25 @@ def _ranked(words, exclude: set[str], limit: int) -> list[dict]:
     out = []
     for z, w in scored[:limit]:
         ph = phones_for(w)
-        out.append({"word": w, "syl": pronouncing.syllable_count(ph) if ph else 0})
+        out.append({"word": w, "z": round(z, 1),
+                    "syl": pronouncing.syllable_count(ph) if ph else 0})
     return out
+
+
+_homophone_index: dict[str, list[str]] | None = None
+
+
+def get_homophones(w: str, phones: str) -> list[str]:
+    global _homophone_index
+    if _homophone_index is None:
+        pronouncing.init_cmu()
+        idx: dict[str, list[str]] = defaultdict(list)
+        for word, ph in pronouncing.pronunciations:
+            if word.isalpha() and zipf_frequency(word, "en") >= 3.0:
+                idx[DIGITS.sub("", _norm_r(ph))].append(word)
+        _homophone_index = idx
+    return [h for h in _homophone_index.get(DIGITS.sub("", phones), [])
+            if h != w][:6]
 
 
 @app.get("/api/word")
@@ -1107,6 +1124,7 @@ def word_info(word: str):
     return {"word": w, "known": True,
             "phones": DIGITS.sub("", phones), "syl": len(stress),
             "stress": stress, "rime": rime,
+            "homophones": get_homophones(w, phones),
             "zipf": round(zipf_frequency(w, "en"), 1)}
 
 
