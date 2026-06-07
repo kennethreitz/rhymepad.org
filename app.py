@@ -556,21 +556,14 @@ def analyze(draft: Draft):
             for key in keys:
                 by_multi[(t["sid"], key)].append(t)
 
-    # a phrase only competes when no word inside it already rhymes
+    # which group holds each already-rhyming word, per line
     grouped_spans = defaultdict(list)
-    for t in tokens:
-        if id(t) in grouped:
-            grouped_spans[t["line"]].append((t["start"], t["end"]))
+    for gi, g in enumerate(raw_groups):
+        for t in g["toks"]:
+            if " " not in t["word"]:
+                grouped_spans[t["line"]].append((t["start"], t["end"], gi))
     for p in phrases:
         if p["weak"]:
-            continue
-        # a phrase yields only when BOTH its halves already rhyme (pure
-        # redundancy); if one half is new, the phrase carries information
-        # (beast mode / sleep though: though already rhymes, beast doesn't)
-        spans = grouped_spans[p["line"]]
-        a_taken = any(s <= p["start"] < e for s, e in spans)
-        b_taken = any(s < p["end"] <= e for s, e in spans)
-        if a_taken and b_taken:
             continue
         vs = p["vowels"]
         if len(vs) >= 3 or (len(vs) == 2 and vs[1] not in REDUCED):
@@ -578,8 +571,22 @@ def analyze(draft: Draft):
         else:
             # V+schwa phrases must bring consonant support
             key = _m2_key(p["rime"].split())
-        if key:
-            attach_or_collect(p, key, by_multi, group_by_multi)
+        if not key:
+            continue
+        spans = grouped_spans[p["line"]]
+        a_gi = next((gi for s, e, gi in spans if s <= p["start"] < e), None)
+        b_gi = next((gi for s, e, gi in spans if s < p["end"] <= e), None)
+        if a_gi is not None and b_gi is not None:
+            # both halves already rhyme — the phrase only matters if it
+            # ties into a THIRD family (four-inch joining the orange/
+            # storage clan while four sits with door and inch with hinge)
+            gi = group_by_multi.get((p["sid"], key))
+            if gi is not None and gi != a_gi and gi != b_gi:
+                raw_groups[gi]["toks"].append(p)
+                p["slant"] = True
+                grouped.add(id(p))
+            continue
+        attach_or_collect(p, key, by_multi, group_by_multi)
 
     # biggest buckets claim first (a token may sit in several via its
     # anchors); distinctness by anchor word, so the phrase "fire burns"

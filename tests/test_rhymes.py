@@ -356,3 +356,13 @@ def test_phrase_joins_slant_group_via_coda_consensus():
             "It's by the door hinge\n"
             "eating pourage")
     group_with(text, "orange", "door hinge", "pourage")
+
+
+def test_the_full_orange_verse():
+    # the Eminem demonstration: every line ties back to orange
+    text = ("I put my orange\nfour-inch\ndoor hinge\nin storage,\n"
+            "and ate porridge with George")
+    group_with(text, "orange", "storage", "porridge",
+               "four-inch", "door hinge")
+    group_with(text, "four", "door", "george")
+    group_with(text, "inch", "hinge")
