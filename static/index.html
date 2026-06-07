@@ -998,7 +998,9 @@ function extractAZBlock(t){
   return block ? block + '\n' : null;
 }
 function cleanPaste(t){
-  t = t.replace(/[\u2018\u2019\u02BC]/g, "'")
+  t = t.replace(/\r\n?/g, '\n')
+       .replace(/[\u2028\u2029\u0085\u000B\u000C]/g, '\n')  // Google's lyrics box
+       .replace(/[\u2018\u2019\u02BC]/g, "'")
        .replace(/[\u201C\u201D]/g, '"')
        .replace(/\u00A0/g, ' ');
   const extracted = extractLyricBlock(t) || extractAZBlock(t);
@@ -1011,6 +1013,8 @@ function cleanPaste(t){
     if(/^Translations$/i.test(s)) return;
     if(/^You might also like/i.test(s)) return;
     if(/^Source:\s/i.test(s)) return;
+    if(/^Songwriters?:/i.test(s)) return;
+    if(/^Musixmatch$/i.test(s)) return;
     if(/^\d*\s*Embed$/.test(s)) return;
     out.push(l);
   });
