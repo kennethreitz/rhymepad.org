@@ -445,3 +445,17 @@ def test_weak_ending_requires_matching_coda():
             "Weaving heaven among hellish screams")
     fam = group_with(text, "entirety", "divinity")
     assert "screams" not in fam
+
+
+def test_cot_caught_merger():
+    # thought (AO T) and lot (AA T) are identical in merged dialects
+    group_with("I thought about it a lot\nI gave it everything I got",
+               "thought", "lot", "got")
+
+
+def test_end_phrase_pure_vowel_rhyme():
+    # forgotten / "off of": AA-schwa at both line ends — assonance is
+    # allowed at the line boundary, like it is for single words
+    text = ("I realize shit and write it down to be forgotten\n"
+            "Building a database to reference my life off of")
+    group_with(text, "forgotten", "off of")

@@ -71,17 +71,22 @@ STOPWORDS = frozenset(
 # --------------------------------------------------------------------------
 
 def _norm_r(phones: str) -> str:
-    """Neutralize vowel contrasts that English loses before R: CMU has
-    fear = F IH1 R but hear = HH IY1 R, yet they rhyme in every dialect
-    (the NEAR vowel). Same for UH/UW (cure, tour)."""
+    """Neutralize contrasts most American English doesn't keep: IH/IY and
+    UH/UW merge before R (fear/hear, cure/tour — the NEAR vowel), and
+    AO merges into AA everywhere else (the cot-caught merger: thought/
+    lot, off/forgotten). Before R the AA/AO split survives (car/core)."""
     pl = phones.split()
-    for i in range(len(pl) - 1):
-        if pl[i + 1][0] == "R" and pl[i][-1].isdigit():
-            base, stress = pl[i][:-1], pl[i][-1]
+    for i in range(len(pl)):
+        if not pl[i][-1].isdigit():
+            continue
+        base, stress = pl[i][:-1], pl[i][-1]
+        if i + 1 < len(pl) and pl[i + 1][0] == "R":
             if base == "IH":
                 pl[i] = "IY" + stress
             elif base == "UH":
                 pl[i] = "UW" + stress
+        elif base == "AO":
+            pl[i] = "AA" + stress
     return " ".join(pl)
 
 
@@ -656,10 +661,31 @@ def analyze(draft: Draft):
             else:
                 for key in filter(None, keys):
                     by_slant[(t["sid"], key)].append(t)
+    # line-ending PHRASES get the same end-position privilege as words:
+    # pure vowel-run matching ("forgotten" / "off of" — AA-schwa)
+    end_spans = defaultdict(list)
+    for g in raw_groups:
+        for t in g["toks"]:
+            if " " not in t["word"]:
+                end_spans[t["line"]].append((t["start"], t["end"]))
+    for p in phrases:
+        if not p["is_end"] or id(p) in grouped or len(p["vowels"]) < 2:
+            continue
+        if any(s < p["end"] <= e for s, e in end_spans[p["line"]]):
+            continue  # the tail word already claimed this line's ending
+        key = "v:" + " ".join(p["vowels"])
+        gi = group_by_slant.get((p["sid"], key))
+        if gi is not None:
+            raw_groups[gi]["toks"].append(p)
+            p["slant"] = True
+            grouped.add(id(p))
+        else:
+            by_slant[(p["sid"], key)].append(p)
+
     for (sid, key), toks in sorted(by_slant.items(),
                                    key=lambda kv: (-len(kv[1]), kv[0][1])):
         toks = [t for t in toks if id(t) not in grouped]
-        if len(toks) >= 2 and len({t["word"].lower() for t in toks}) >= 2:
+        if len(toks) >= 2 and len({t["word"].split()[0] for t in toks}) >= 2:
             raw_groups.append({"toks": toks, "slant": True, "key": key})
             grouped.update(id(t) for t in toks)
 
