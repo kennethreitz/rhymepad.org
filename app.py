@@ -331,9 +331,15 @@ def analyze(draft: Draft):
     sids: list[int | None] = []
     sid, prev_blank = -1, True
     for line in lines:
-        if not line.strip():
+        stripped = line.strip()
+        if not stripped:
             sids.append(None)
             prev_blank = True
+            continue
+        if stripped[0] in "#([":
+            # annotation line ([Chorus], (yeah), # notes) — no highlighting,
+            # no scheme letter, and it doesn't split the stanza either
+            sids.append(None)
             continue
         if prev_blank:
             sid += 1

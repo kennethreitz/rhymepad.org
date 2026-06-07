@@ -144,45 +144,12 @@
   .scheme-readout b { color: var(--accent-2); letter-spacing: 0.15em; }
   .scheme-readout .offline { color: var(--r6); letter-spacing: 0.02em; }
 
-  /* ---- stanza reorder overlay ---- */
-  #reorderOverlay {
-    position: fixed; inset: 0; z-index: 50;
-    background: rgba(10,8,6,0.7); backdrop-filter: blur(3px);
-    display: flex; align-items: center; justify-content: center;
+  .mtoggle {
+    display: flex; align-items: center; gap: 6px;
+    color: var(--ink-dim); font-size: 12px; cursor: pointer; user-select: none;
   }
-  #reorderOverlay[hidden] { display: none; }
-  .reorder-box {
-    width: min(560px, 92vw); max-height: 80vh;
-    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-    display: flex; flex-direction: column; overflow: hidden;
-  }
-  .reorder-box h3 {
-    margin: 0; padding: 16px 20px 12px;
-    font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px;
-  }
-  .reorder-box .hint { padding: 0 20px 10px; color: var(--ink-dim); font-size: 12px; }
-  #stanzaList { padding: 0 16px 8px; overflow-y: auto; flex: 1; }
-  .stanza-card {
-    display: flex; align-items: center; gap: 12px;
-    background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
-    padding: 12px 14px; margin-bottom: 8px; cursor: grab;
-    transition: border-color .15s, opacity .15s;
-  }
-  .stanza-card:active { cursor: grabbing; }
-  .stanza-card.dragging { opacity: 0.35; }
-  .stanza-card.drop-above { border-top: 2px solid var(--accent); }
-  .stanza-card.drop-below { border-bottom: 2px solid var(--accent); }
-  .stanza-card .grip { color: var(--ink-dim); font-size: 16px; user-select: none; }
-  .stanza-card .preview { flex: 1; min-width: 0; }
-  .stanza-card .first-line {
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px;
-  }
-  .stanza-card .meta-line { color: var(--ink-dim); font-size: 11px; margin-top: 3px; }
-  .stanza-card .scheme-badge {
-    color: var(--accent-2); font-size: 11px; letter-spacing: 0.18em;
-    text-transform: uppercase; white-space: nowrap;
-  }
-  .reorder-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 16px; }
+  .mtoggle input { accent-color: var(--accent); }
+  .mtoggle:hover { color: var(--ink); }
 
   /* ---- side panel ---- */
   aside {
@@ -218,6 +185,21 @@
   }
   .seg button.active { color: var(--accent); border-color: var(--accent); }
   .results { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 6px; }
+  .defcard {
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; margin: 10px 0 4px;
+  }
+  .defhead { display: flex; align-items: baseline; gap: 8px; font-size: 14px; }
+  .defhead .phon { color: var(--ink-dim); font-size: 12px; }
+  .defx { margin-left: auto; cursor: pointer; color: var(--ink-dim); font-size: 15px; }
+  .defx:hover { color: var(--r6); }
+  .defs { margin: 8px 0 10px; padding-left: 18px; font-size: 13px; line-height: 1.55; }
+  .defs li { margin: 4px 0; }
+  .defs i {
+    color: var(--accent-2); font-style: normal; font-size: 11px;
+    text-transform: uppercase; letter-spacing: .06em; margin-right: 4px;
+  }
+  .btn.small { padding: 5px 10px; font-size: 12px; }
   .chip {
     font-size: 13px; background: var(--panel-2); border: 1px solid var(--line);
     color: var(--ink); padding: 5px 10px; border-radius: 999px; cursor: pointer;
@@ -269,9 +251,9 @@ Double-click any word to look it up on the right."></textarea>
     </div>
     <div class="toolbar">
       <button class="btn primary" id="copyBtn">Copy to clipboard</button>
-      <button class="btn" id="reorderBtn">Reorder stanzas</button>
       <button class="btn" id="clearBtn">Clear</button>
       <button class="btn" id="sampleBtn">Load sample</button>
+      <label class="mtoggle"><input type="checkbox" id="meterToggle"> meter check</label>
       <div class="scheme-readout" id="schemeReadout"></div>
     </div>
   </div>
@@ -293,8 +275,9 @@ Double-click any word to look it up on the right."></textarea>
         <button data-mode="near">Near rhymes</button>
         <button data-mode="syn">Synonyms</button>
       </div>
+      <div id="defBox"></div>
       <div id="lookupResults">
-        <p class="muted">Type a word and hit Go, or double-click a word in your draft. Click any result to insert it at the cursor.</p>
+        <p class="muted">Type a word and hit Go, or double-click a word in your draft. Click any result to see its definition.</p>
       </div>
       <div class="legend">
         <div class="res-label">Current stanza</div>
@@ -319,18 +302,6 @@ Double-click any word to look it up on the right."></textarea>
   </aside>
 
   <footer></footer>
-</div>
-
-<!-- STANZA REORDER -->
-<div id="reorderOverlay" hidden>
-  <div class="reorder-box">
-    <h3>Reorder stanzas</h3>
-    <div class="hint">Drag cards to rearrange. Changes apply instantly.</div>
-    <div id="stanzaList"></div>
-    <div class="reorder-actions">
-      <button class="btn primary" id="reorderDone">Done</button>
-    </div>
-  </div>
 </div>
 
 <script>
@@ -511,7 +482,8 @@ function render(){
         h += `<span class="hseg" style="${style}">${text}</span>`;
       }
     }
-    const m = fresh && analysis.meter ? analysis.meter.find(x=>x.l===i) : null;
+    const m = meterToggle.checked && fresh && analysis.meter
+      ? analysis.meter.find(x=>x.l===i) : null;
     html += (m && m.off ? `<span class="offbeat">${h}</span>` : h) + '\n';
   });
   highlight.innerHTML = html;
@@ -542,7 +514,7 @@ function buildReadout(){
   const m = analysis && analysis.meter ? analysis.meter.find(x=>x.l===ln) : null;
   if(m){
     let p = `${m.syl} syl` + (m.label ? ` · ${m.label}` : '');
-    if(m.off) p += ` <span class="offline">· breaks stanza meter (~${m.target} syl)</span>`;
+    if(m.off && meterToggle.checked) p += ` <span class="offline">· breaks stanza meter (~${m.target} syl)</span>`;
     parts.push(p);
   }
   const st = caretStanza();
@@ -607,6 +579,7 @@ const resultsBox = document.getElementById('lookupResults');
 async function doLookup(){
   const word = document.getElementById('lookupInput').value.trim();
   if(!word) return;
+  defBox.innerHTML = '';
   resultsBox.innerHTML = '<p class="muted">Searching…</p>';
   try{
     if(mode === 'syn'){
@@ -634,8 +607,40 @@ function chipHtml(words){
 }
 function wireChips(){
   resultsBox.querySelectorAll('.chip').forEach(c=>{
-    c.addEventListener('click', ()=> insertAtCursor(c.dataset.w));
+    c.addEventListener('click', ()=> showDefinition(c.dataset.w));
   });
+}
+
+/* ---------- definition card (free dictionary API) ---------- */
+const defBox = document.getElementById('defBox');
+function defCard(word, inner){
+  defBox.innerHTML = `
+    <div class="defcard">
+      <div class="defhead"><b>${esc(word)}</b><span class="phon" id="defPhon"></span>
+        <span class="defx" title="Dismiss">×</span></div>
+      ${inner}
+      <div class="def-actions"><button class="btn small" id="defInsert">Insert at cursor</button></div>
+    </div>`;
+  defBox.querySelector('#defInsert').addEventListener('click', ()=> insertAtCursor(word));
+  defBox.querySelector('.defx').addEventListener('click', ()=>{ defBox.innerHTML=''; });
+}
+async function showDefinition(word){
+  defCard(word, '<p class="muted">Looking it up…</p>');
+  try{
+    const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+    if(!r.ok) throw new Error('no entry');
+    const entry = (await r.json())[0];
+    const phon = (entry.phonetics || []).map(p=>p.text).find(Boolean) || '';
+    const defs = [];
+    (entry.meanings || []).forEach(m=>{
+      (m.definitions || []).slice(0, 2).forEach(d=> defs.push({pos: m.partOfSpeech, def: d.definition}));
+    });
+    const items = defs.slice(0, 4).map(d=>`<li><i>${esc(d.pos || '')}</i>${esc(d.def)}</li>`).join('');
+    defCard(word, `<ol class="defs">${items}</ol>`);
+    if(phon) defBox.querySelector('#defPhon').textContent = phon;
+  }catch(e){
+    defCard(word, '<p class="muted">No dictionary entry found.</p>');
+  }
 }
 function renderChips(label, words){
   if(!words.length){ resultsBox.innerHTML = '<p class="muted">No results.</p>'; return; }
@@ -655,78 +660,15 @@ function renderBySyllable(word, items, label){
 }
 
 /* ============================================================
-   STANZA REORDER — drag cards to rearrange blank-line-separated
-   stanzas; the draft updates on every drop.
+   METER CHECK — toggleable wavy-underline warnings for lines
+   that break their stanza's syllable pattern.
 ============================================================ */
-const overlay = document.getElementById('reorderOverlay');
-const stanzaList = document.getElementById('stanzaList');
-let blocks = [];
-
-function openReorder(){
-  blocks = editor.value.split(/\n{2,}/).map(b=>b.trim()).filter(Boolean);
-  if(blocks.length < 2){ flash('reorderBtn','Need 2+ stanzas'); return; }
-  buildCards();
-  overlay.hidden = false;
-}
-function schemeOf(block){
-  if(!analysis) return '';
-  const first = block.split('\n')[0];
-  const idx = analysis.lines.indexOf(first);
-  if(idx < 0) return '';
-  const st = analysis.stanzas.find(s=>s.lines.includes(idx));
-  return st ? st.scheme : '';
-}
-function buildCards(){
-  stanzaList.innerHTML = '';
-  blocks.forEach((b, i)=>{
-    const lines = b.split('\n');
-    const card = document.createElement('div');
-    card.className = 'stanza-card';
-    card.draggable = true;
-    card.dataset.idx = i;
-    const scheme = schemeOf(b);
-    card.innerHTML = `
-      <span class="grip">⠿</span>
-      <span class="preview">
-        <div class="first-line">${esc(lines[0])}</div>
-        <div class="meta-line">${lines.length} line${lines.length===1?'':'s'}</div>
-      </span>
-      ${scheme ? `<span class="scheme-badge">${scheme.split('').join(' ')}</span>` : ''}`;
-    card.addEventListener('dragstart', ()=>{ dragIdx = i; card.classList.add('dragging'); });
-    card.addEventListener('dragend', ()=>{ dragIdx = null; card.classList.remove('dragging'); clearDrops(); });
-    card.addEventListener('dragover', e=>{
-      e.preventDefault();
-      clearDrops();
-      const before = e.offsetY < card.offsetHeight / 2;
-      card.classList.add(before ? 'drop-above' : 'drop-below');
-    });
-    card.addEventListener('drop', e=>{
-      e.preventDefault();
-      if(dragIdx === null) return;
-      const before = e.offsetY < card.offsetHeight / 2;
-      let to = i + (before ? 0 : 1);
-      const [moved] = blocks.splice(dragIdx, 1);
-      if(dragIdx < to) to--;
-      blocks.splice(to, 0, moved);
-      applyBlocks();
-      buildCards();
-    });
-    stanzaList.appendChild(card);
-  });
-}
-let dragIdx = null;
-function clearDrops(){
-  stanzaList.querySelectorAll('.stanza-card').forEach(c=>c.classList.remove('drop-above','drop-below'));
-}
-function applyBlocks(){
-  editor.value = blocks.join('\n\n');
+const meterToggle = document.getElementById('meterToggle');
+meterToggle.checked = localStorage.getItem('rhymepad.meter') === '1';
+meterToggle.addEventListener('change', ()=>{
+  try{ localStorage.setItem('rhymepad.meter', meterToggle.checked ? '1' : '0'); }catch(e){}
   render();
-  analyzeSoon();
-}
-document.getElementById('reorderBtn').addEventListener('click', openReorder);
-document.getElementById('reorderDone').addEventListener('click', ()=>{ overlay.hidden = true; editor.focus(); });
-overlay.addEventListener('click', e=>{ if(e.target === overlay){ overlay.hidden = true; editor.focus(); } });
-document.addEventListener('keydown', e=>{ if(e.key === 'Escape' && !overlay.hidden){ overlay.hidden = true; editor.focus(); } });
+});
 
 /* ============================================================
    COPY / CLEAR / SAMPLE

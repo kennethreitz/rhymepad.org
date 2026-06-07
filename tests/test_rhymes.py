@@ -264,3 +264,20 @@ def test_weak_phrase_attaches_but_never_founds():
     group_with(text, "syrup", "burden", "were up")
     # ...but two weak phrases alone can't create a group
     assert "were up" not in highlighted("it were up to him\nit were up to her")
+
+
+def test_annotation_lines_ignored():
+    text = ("[Chorus]\n"
+            "the cat\n"
+            "a hat\n"
+            "# note: tighten this verse\n"
+            "(yeah)\n"
+            "so blue\n"
+            "so true")
+    res = analyze(Draft(text=text))
+    assert "chorus" not in highlighted(text)
+    assert "note" not in highlighted(text)
+    # annotations don't split the stanza or earn scheme letters
+    (st,) = res["stanzas"]
+    assert st["lines"] == [1, 2, 5, 6]
+    assert st["scheme"] == "aabb"
