@@ -114,6 +114,7 @@
     z-index: 1;
   }
   #highlight .anno { color: #6a5f52; }
+  #editor::selection { background: rgba(232,129,74,0.22); color: transparent; }
   #stresslayer {
     pointer-events: none;
     color: transparent;
@@ -129,7 +130,6 @@
     background: transparent;
     color: transparent;
     caret-color: var(--accent);
-    &::selection { background: rgba(232,129,74,0.22); }
     resize: none;
     z-index: 2;
     outline: none;
@@ -579,7 +579,7 @@ function render(){
         h += `<span class="hseg" style="${style}">${text}</span>`;
       }
     }
-    html += h + '\n';
+    html += (/^\s*[#([]/.test(line) ? `<span class="anno">${h}</span>` : h) + '\n';
   });
   highlight.innerHTML = html;
   renderStress(lines);
