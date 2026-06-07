@@ -779,11 +779,12 @@ async function doLookup(){
   defBox.innerHTML = `<div class="defhead"><b>${esc(word)}</b></div>` +
     `<div class="muted defphon" id="defPhon">…</div>`;
   resultsBox.innerHTML = '<p class="muted">gathering…</p>';
-  const [info, rhyme, syn, desc] = await Promise.all([
+  const [info, rhyme, syn, desc, trig] = await Promise.all([
     fetch(`/api/word?word=${encodeURIComponent(word)}`).then(r=>r.json()).catch(()=>null),
     fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=rhyme`).then(r=>r.json()).catch(()=>null),
     fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=syn`).then(r=>r.json()).catch(()=>null),
     fetch(`https://api.datamuse.com/words?rel_jjb=${encodeURIComponent(word)}&max=40`).then(r=>r.json()).catch(()=>null),
+    fetch(`https://api.datamuse.com/words?rel_trg=${encodeURIComponent(word)}&max=30`).then(r=>r.json()).catch(()=>null),
   ]);
   if(seq !== lookupSeq) return;
   const el = defBox.querySelector('#defPhon');
@@ -800,7 +801,7 @@ async function doLookup(){
       el.textContent = 'not in the pronunciation dictionary';
     }
   }
-  entry = {word, rhyme, syn, desc};
+  entry = {word, rhyme, syn, desc, trig};
   paintSections();
 }
 
@@ -839,6 +840,10 @@ function paintSections(){
   const e = entry;
   if(!e) return;
   let h = '';
+  if(e.trig && e.trig.length){
+    // what the word summons — the theme-building lens
+    h += `<div class="res-label">associations</div>` + chipHtml(e.trig.map(d=>d.word));
+  }
   if(e.desc && e.desc.length){
     h += `<div class="res-label">describes</div>` + chipHtml(e.desc.map(d=>d.word));
   }
