@@ -551,8 +551,13 @@ def analyze(draft: Draft):
     for p in phrases:
         if p["weak"]:
             continue
-        if any(s < p["end"] and p["start"] < e
-               for s, e in grouped_spans[p["line"]]):
+        # a phrase yields only when BOTH its halves already rhyme (pure
+        # redundancy); if one half is new, the phrase carries information
+        # (beast mode / sleep though: though already rhymes, beast doesn't)
+        spans = grouped_spans[p["line"]]
+        a_taken = any(s <= p["start"] < e for s, e in spans)
+        b_taken = any(s < p["end"] <= e for s, e in spans)
+        if a_taken and b_taken:
             continue
         vs = p["vowels"]
         if len(vs) >= 3 or (len(vs) == 2 and vs[1] not in REDUCED):

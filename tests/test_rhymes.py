@@ -336,3 +336,14 @@ def test_schwa_phrase_needs_consonant_support():
     text = ("Looming over your shoulder, like a sloth hugs a tree,\n"
             "Thinking it won't fall, yet there it goes. Damn, it's free.")
     assert "sloth hugs" not in highlighted(text)
+
+
+def test_phrase_with_one_new_half_is_not_suppressed():
+    # though/mode already rhyme as words, but beast/sleep/seats only
+    # rhyme through the phrase pairs — those must survive
+    text = ("Look, I woke up in beast mode\n"
+            "With my girl, that's beauty and the beast though\n"
+            "Been top 5, these niggas sleep though\n"
+            "Only thing that sold out is the seats though")
+    group_with(text, "beast mode", "beast though", "sleep though",
+               "seats though")
