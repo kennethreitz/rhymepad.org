@@ -281,3 +281,19 @@ def test_annotation_lines_ignored():
     (st,) = res["stanzas"]
     assert st["lines"] == [1, 2, 5, 6]
     assert st["scheme"] == "aabb"
+
+
+def test_perfect_subgroup_fuses_with_slant_family():
+    # shoulder/older/colder (perfect, OW L D ER) live inside the bigger
+    # OW-schwa family — one color for the whole column
+    text = ("Skunk, bug, soldier\n"
+            "Tongue, shrub, shoulder\n"
+            "One month older\n"
+            "Sponge, mob, colder\n"
+            "Nun, rug, holster\n"
+            "Lug nut, coaster\n"
+            "Lung, jug, roaster\n"
+            "Young Thug poster\n"
+            "Unplugged toaster")
+    group_with(text, "soldier", "shoulder", "older", "colder", "holster",
+               "coaster", "roaster", "poster", "toaster")

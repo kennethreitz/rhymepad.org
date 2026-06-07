@@ -547,6 +547,31 @@ def analyze(draft: Draft):
             raw_groups[gi]["toks"].append(p)
             grouped.add(id(p))
 
+    # fuse groups that carry the same vowel family — a perfect subgroup
+    # (shoulder/older/colder) shouldn't split colors with the slant family
+    # it lives inside (soldier/holster/coaster). Perfect members keep the
+    # strong styling; the slant side keeps per-token slant marks.
+    by_family: dict[str, dict] = {}
+    fused: list[dict] = []
+    for g in raw_groups:
+        mk = founding_projections(g["key"]).get("multi")
+        tgt = by_family.get(mk) if mk else None
+        if tgt is None:
+            if mk:
+                by_family[mk] = g
+            fused.append(g)
+            continue
+        if g["slant"]:
+            for t in g["toks"]:
+                t["slant"] = True
+        elif tgt["slant"]:
+            for t in tgt["toks"]:
+                t["slant"] = True
+            tgt["slant"] = False
+            tgt["key"] = g["key"]
+        tgt["toks"].extend(g["toks"])
+    raw_groups = fused
+
     # stable colors: order groups by first appearance
     raw_groups.sort(key=lambda g: min((t["line"], t["start"]) for t in g["toks"]))
     groups_out = []
