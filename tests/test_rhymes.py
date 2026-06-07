@@ -459,3 +459,14 @@ def test_end_phrase_pure_vowel_rhyme():
     text = ("I realize shit and write it down to be forgotten\n"
             "Building a database to reference my life off of")
     group_with(text, "forgotten", "off of")
+
+
+def test_weak_endings_never_split_rich_chains():
+    # the weak -er ending must not steal commissioner from the militia
+    # family it rhymes with multisyllabically
+    text = ("Ahem, excuse my charisma, vodka with a spritzer\n"
+            "Swagger down pat; call my shit Patricia\n"
+            "Young Money militia and I am the commissioner\n"
+            "You no wan' start Weezy 'cause the F is for finisher")
+    group_with(text, "charisma", "patricia", "militia",
+               "commissioner", "finisher", "spritzer")

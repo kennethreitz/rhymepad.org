@@ -643,24 +643,13 @@ def analyze(draft: Draft):
     # A leftover ending first tries to JOIN an existing group whose
     # founding sound shares its vowel tail (time -> the mind/find group);
     # otherwise leftovers form a new slant group among themselves.
-    group_by_slant = {**gmap_for("slant"), **gmap_for("weak")}
+    group_by_slant = gmap_for("slant")
     by_slant = defaultdict(list)
     for t in tokens:
         if t["is_end"] and id(t) not in grouped:
-            keys = [slant_key(t["word"])]
-            wk = weak_end_key(t["word"])
-            if wk and wk not in keys:
-                keys.append(wk)  # feminine endings: infancy rhymes see
-            for key in filter(None, keys):
-                gi = group_by_slant.get((t["sid"], key))
-                if gi is not None:
-                    raw_groups[gi]["toks"].append(t)
-                    t["slant"] = True
-                    grouped.add(id(t))
-                    break
-            else:
-                for key in filter(None, keys):
-                    by_slant[(t["sid"], key)].append(t)
+            key = slant_key(t["word"])
+            if key:
+                attach_or_collect(t, key, by_slant, group_by_slant)
     # line-ending PHRASES get the same end-position privilege as words:
     # pure vowel-run matching ("forgotten" / "off of" — AA-schwa)
     end_spans = defaultdict(list)
@@ -799,6 +788,24 @@ def analyze(draft: Draft):
         if key:
             attach_or_collect(t, key, by_vc, group_by_vc)
     for (sid, key), toks in by_vc.items():
+        if len(toks) >= 2 and len({t["word"].lower() for t in toks}) >= 2:
+            raw_groups.append({"toks": toks, "slant": True, "key": key})
+            grouped.update(id(t) for t in toks)
+
+    # pass 5: weak endings, the LAST resort — infancy rhymes see on its
+    # unstressed final syllable, but only after every richer reading
+    # (commissioner belongs with militia, not with "her")
+    group_by_weak = gmap_for("weak")
+    by_weak = defaultdict(list)
+    for t in tokens:
+        if not t["is_end"] or id(t) in grouped:
+            continue
+        key = weak_end_key(t["word"])
+        if key:
+            attach_or_collect(t, key, by_weak, group_by_weak)
+    for (sid, key), toks in sorted(by_weak.items(),
+                                   key=lambda kv: (-len(kv[1]), kv[0][1])):
+        toks = [t for t in toks if id(t) not in grouped]
         if len(toks) >= 2 and len({t["word"].lower() for t in toks}) >= 2:
             raw_groups.append({"toks": toks, "slant": True, "key": key})
             grouped.update(id(t) for t in toks)
