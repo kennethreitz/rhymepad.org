@@ -470,3 +470,10 @@ def test_weak_endings_never_split_rich_chains():
             "You no wan' start Weezy 'cause the F is for finisher")
     group_with(text, "charisma", "patricia", "militia",
                "commissioner", "finisher", "spritzer")
+
+
+def test_schwa_heavy_phrase_cannot_join_word_family():
+    # "Two bitches" (UW + schwas) must not ride the Buddha/scuba chain
+    text = ("doin' it like Buddha, scuba, Cuba\n"
+            "Two bitches at the same time")
+    assert "two bitches" not in highlighted(text)

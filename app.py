@@ -709,10 +709,12 @@ def analyze(draft: Draft):
         for t in g["toks"]:
             if " " not in t["word"]:
                 grouped_spans[t["line"]].append((t["start"], t["end"], gi))
+    by_par = defaultdict(list)
     for p in phrases:
         if p["weak"]:
             continue
         vs = p["vowels"]
+        full = sum(1 for v in vs if v not in REDUCED)
         if len(vs) >= 3 or (len(vs) == 2 and vs[1] not in REDUCED):
             key = _multi_key(vs)
         else:
@@ -725,6 +727,12 @@ def analyze(draft: Draft):
             # anchor + schwa-tails ("Sleep is the") prove nothing
             if sum(v != "x" for v in key[2:].split()) < 2:
                 continue
+        if full < 2 and not key.startswith("m2:"):
+            # a schwa-heavy run can't barge into a word family ("Two
+            # bitches" -> the Tuna chain), but parallel phrases may pair
+            # with each other (clock's ticking / stop tripping)
+            by_par[(p["sid"], key)].append(p)
+            continue
         spans = grouped_spans[p["line"]]
         a_gi = next((gi for s, e, gi in spans if s <= p["start"] < e), None)
         b_gi = next((gi for s, e, gi in spans if s < p["end"] <= e), None)
@@ -745,6 +753,12 @@ def analyze(draft: Draft):
                 by_multi[(p["sid"], key)].append(p)
             continue
         attach_or_collect(p, key, by_multi, group_by_multi)
+
+    for (sid, key), toks in by_par.items():
+        toks = [t for t in toks if id(t) not in grouped]
+        if len(toks) >= 2 and len({t["word"].split()[0] for t in toks}) >= 2:
+            raw_groups.append({"toks": toks, "slant": True, "key": key})
+            grouped.update(id(t) for t in toks)
 
     # biggest buckets claim first (a token may sit in several via its
     # anchors); distinctness by anchor word, so the phrase "fire burns"
