@@ -956,6 +956,46 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
 });
 
 /* ============================================================
+   SMART PASTE — typographic quotes break phonetic tokenization
+   (don’t -> don + t), and lyrics sites ship cruft lines. Pasted
+   text gets normalized and de-crufted on the way in.
+============================================================ */
+function cleanPaste(t){
+  t = t.replace(/[\u2018\u2019\u02BC]/g, "'")
+       .replace(/[\u201C\u201D]/g, '"')
+       .replace(/\u00A0/g, ' ');
+  const out = [];
+  t.split('\n').forEach((l, i)=>{
+    const s = l.trim();
+    if(i < 4 && /^\d+\s*Contributors/i.test(s)) return;
+    if(i < 4 && /Lyrics$/.test(s) && s.length < 60) return;
+    if(/^Translations$/i.test(s)) return;
+    if(/^You might also like/i.test(s)) return;
+    if(/^Source:\s/i.test(s)) return;
+    if(/^\d*\s*Embed$/.test(s)) return;
+    out.push(l);
+  });
+  return out.join('\n');
+}
+editor.addEventListener('paste', e=>{
+  const text = e.clipboardData && e.clipboardData.getData('text/plain');
+  if(!text) return;
+  const cleaned = cleanPaste(text);
+  if(cleaned === text) return;
+  e.preventDefault();
+  editor.setRangeText(cleaned, editor.selectionStart, editor.selectionEnd, 'end');
+  render(); analyzeSoon();
+});
+lookupInput.addEventListener('paste', e=>{
+  const text = e.clipboardData && e.clipboardData.getData('text/plain');
+  if(text && /[\u2018\u2019]/.test(text)){
+    e.preventDefault();
+    lookupInput.setRangeText(text.replace(/[\u2018\u2019]/g, "'"),
+      lookupInput.selectionStart, lookupInput.selectionEnd, 'end');
+  }
+});
+
+/* ============================================================
    FILES IN, FILES OUT — drafts shouldn't be hostage to localStorage
 ============================================================ */
 function draftFilename(){
@@ -979,7 +1019,7 @@ document.addEventListener('drop', async e=>{
   const files = [...(e.dataTransfer?.files || [])].slice(0, 8);
   for(const f of files){
     if(f.size > 1024 * 1024) continue;
-    const text = await f.text();
+    const text = cleanPaste(await f.text());
     if(!text.trim()) continue;
     const id = newId();
     docsState.docs.push({id, title: titleOf(text)});
