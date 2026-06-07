@@ -828,7 +828,8 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
   const palette = Array.from({length: COLORS}, (_, i)=>css.getPropertyValue(`--r${i}`).trim());
   const ink = css.getPropertyValue('--ink').trim();
   const bg = css.getPropertyValue('--bg').trim();
-  const S = 2, FS = 16, LH = FS * 1.9, PAD = 40;
+  const rhythm = stressToggle.checked && analysis && analysis.stress;
+  const S = 2, FS = 16, LH = FS * (rhythm ? 2.35 : 1.9), PAD = 40;
   const font = FS + "px 'Spline Sans Mono', monospace";
 
   const probe = document.createElement('canvas').getContext('2d');
@@ -872,6 +873,23 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
     }
     x.fillStyle = ink;
     x.fillText(line, PAD, y);
+    if(rhythm && fresh){
+      const spans = (analysis.stress.filter(s=>s.l===i)).sort((a,b)=>a.s-b.s);
+      x.font = "8px 'Spline Sans Mono', monospace";
+      x.textAlign = 'center';
+      spans.forEach(s=>{
+        const x0 = PAD + x.measureText(line.slice(0, s.s)).width * 2;
+        // measure with the body font for positions
+        x.font = font;
+        const left = PAD + x.measureText(line.slice(0, s.s)).width;
+        const wpx = x.measureText(line.slice(s.s, s.e)).width;
+        x.font = "9px 'Spline Sans Mono', monospace";
+        const dots = [...s.st].map(c=> c === '0' ? '○' : '●').join(' ');
+        x.fillText(dots, left + wpx / 2, y + FS * 0.95);
+      });
+      x.textAlign = 'left';
+      x.font = font;
+    }
   });
   x.fillStyle = 'rgba(167,154,137,0.55)';
   x.font = "11px 'Spline Sans Mono', monospace";
