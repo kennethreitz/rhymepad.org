@@ -289,9 +289,9 @@ Double-click any word to look it up on the right."></textarea>
         <button class="btn" id="lookupBtn">Go</button>
       </div>
       <div class="seg" id="modeSeg">
-        <button class="active" data-mode="rhyme">Rhymes</button>
+        <button class="active" data-mode="desc" title="Adjectives that describe it">Describes</button>
+        <button data-mode="rhyme">Rhymes</button>
         <button data-mode="syn">Synonyms</button>
-        <button data-mode="desc" title="Adjectives that describe it">Describes</button>
       </div>
       <div id="defBox"></div>
       <div id="lookupResults">
@@ -590,7 +590,7 @@ function lookupSelection(){
   if(sel && !sel.includes(' ')){
     document.getElementById('lookupInput').value = sel;
     tab('lookup');
-    doLookup();
+    setMode('desc');
   }
 }
 editor.addEventListener('dblclick', lookupSelection);
@@ -608,7 +608,7 @@ if(window.matchMedia('(pointer: coarse)').matches){
    frequency-ranked). Synonyms come from the free Datamuse API.
 ============================================================ */
 const modeSeg = document.getElementById('modeSeg');
-let mode = 'rhyme';
+let mode = 'desc';
 function setMode(m){
   mode = m;
   [...modeSeg.children].forEach(c=>c.classList.toggle('active', c.dataset.mode === m));
