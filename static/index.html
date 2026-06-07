@@ -373,6 +373,29 @@ function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout
 
 let analysis = null;      // last server response
 let backendOk = true;
+let focusGid = null;      // spotlight: the family under the caret
+
+function caretGid(){
+  if(!analysis || editor.selectionStart !== editor.selectionEnd) return null;
+  const pos = editor.selectionStart;
+  const before = editor.value.slice(0, pos);
+  const ln = before.split('\n').length - 1;
+  const col = pos - (before.lastIndexOf('\n') + 1);
+  const line = editor.value.split('\n')[ln];
+  if(!analysis.lines || analysis.lines[ln] !== line) return null;
+  let best = null;
+  analysis.tokens.forEach(t=>{
+    if(t.l === ln && t.s <= col && col < t.e){
+      if(!best || (t.e - t.s) < (best.e - best.s)) best = t;
+    }
+  });
+  return best ? best.g : null;
+}
+
+function updateSpotlight(){
+  const g = caretGid();
+  if(g !== focusGid){ focusGid = g; render(); }
+}
 let analyzeSeq = 0;       // guards against out-of-order responses
 
 const SAMPLE_TEXT =
@@ -573,11 +596,15 @@ function render(){
         // gray = an ending still waiting for its answer
         let style = '';
         if(w || p){
-          const alpha = w ? (w.end ? 34 : 19) : (p.end ? 24 : 14);
-          const color = w ? colorOf(w) : colorOf(p);
-          style += `background:color-mix(in srgb, ${color} ${alpha}%, transparent);`;
+          const t = (w && (focusGid === null || w.g === focusGid)) ? w
+                  : (p && (focusGid === null || p.g === focusGid)) ? p
+                  : (w || p);
+          let alpha = !t.ph ? (t.end ? 34 : 19) : (t.end ? 24 : 14);
+          if(focusGid !== null && t.g !== focusGid) alpha = Math.round(alpha * 0.22);
+          style += `background:color-mix(in srgb, ${colorOf(t)} ${alpha}%, transparent);`;
         }else if(op){
-          style += `background:color-mix(in srgb, var(--ink-dim) 13%, transparent);`;
+          const opAlpha = focusGid === null ? 13 : 3;
+          style += `background:color-mix(in srgb, var(--ink-dim) ${opAlpha}%, transparent);`;
         }
         if(al) style += `box-shadow:inset 0 -2px 0 0 color-mix(in srgb, var(--r${al.g % COLORS}) 75%, transparent);`;
         h += `<span class="hseg" style="${style}">${text}</span>`;
@@ -700,10 +727,10 @@ function buildReadout(){
   schemeReadout.innerHTML = parts.join(' &nbsp;&nbsp; ');
 }
 
-editor.addEventListener('input', ()=>{ render(); analyzeSoon(); });
+editor.addEventListener('input', ()=>{ focusGid = caretGid(); render(); analyzeSoon(); });
 editor.addEventListener('scroll', ()=>{ highlight.scrollTop = stresslayer.scrollTop = editor.scrollTop; highlight.scrollLeft = stresslayer.scrollLeft = editor.scrollLeft; });
-editor.addEventListener('keyup', buildReadout);
-editor.addEventListener('click', buildReadout);
+editor.addEventListener('keyup', ()=>{ updateSpotlight(); buildReadout(); });
+editor.addEventListener('click', ()=>{ updateSpotlight(); buildReadout(); });
 
 /* ---------- double-click (or touch-select) a word -> look it up ---------- */
 function lookupSelection(){
