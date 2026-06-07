@@ -414,9 +414,13 @@ function buildReadout(){
     schemeReadout.innerHTML = '<span class="offline">backend offline — run: uv run uvicorn app:app</span>';
     return;
   }
+  const parts = [];
+  const ln = caretLine();
+  const m = analysis && analysis.meter ? analysis.meter.find(x=>x.l===ln) : null;
+  if(m) parts.push(`${m.syl} syl` + (m.label ? ` · ${m.label}` : ''));
   const st = caretStanza();
-  if(!st || !st.scheme){ schemeReadout.innerHTML = ''; return; }
-  schemeReadout.innerHTML = `stanza scheme &nbsp;<b>${st.scheme.toUpperCase().split('').join(' ')}</b>`;
+  if(st && st.scheme) parts.push(`scheme <b>${st.scheme.toUpperCase().split('').join(' ')}</b>`);
+  schemeReadout.innerHTML = parts.join(' &nbsp;&nbsp; ');
 }
 
 function buildLegend(){

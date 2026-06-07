@@ -190,3 +190,28 @@ def test_stanzas_and_legend():
 def test_blank_lines_split_stanzas():
     res = analyze(Draft(text="the cat\na hat\n\nso blue\nso true"))
     assert [s["scheme"] for s in res["stanzas"]] == ["aa", "aa"]
+
+
+# ------------------------------------------------------------------ meter
+
+def meter_of(line: str) -> dict:
+    res = analyze(Draft(text=line))
+    return res["meter"][0]
+
+
+def test_iambic_pentameter():
+    m = meter_of("Shall I compare thee to a summer's day")
+    assert m["syl"] == 10
+    assert m["label"] == "iambic pentameter"
+
+
+def test_trochaic_tetrameter():
+    m = meter_of("Tyger Tyger burning bright")
+    assert m["syl"] == 7  # catalectic — final unstressed syllable dropped
+    assert m["label"] == "trochaic tetrameter"
+
+
+def test_syllables_always_reported():
+    m = meter_of("the city hums in amber under fading light")
+    assert m["syl"] == 12
+    assert m["stress"]

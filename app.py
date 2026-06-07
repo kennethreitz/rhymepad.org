@@ -248,6 +248,56 @@ def slant_key(word: str) -> str | None:
 
 
 # --------------------------------------------------------------------------
+# meter
+# --------------------------------------------------------------------------
+
+FEET = {
+    "iambic": "01", "trochaic": "10", "anapestic": "001",
+    "dactylic": "100", "amphibrachic": "010",
+}
+METER_NAMES = {1: "monometer", 2: "dimeter", 3: "trimeter", 4: "tetrameter",
+               5: "pentameter", 6: "hexameter", 7: "heptameter", 8: "octameter"}
+
+
+def line_meter(line: str) -> dict | None:
+    """Syllable count and best-fit metrical foot for a line.
+
+    Stress comes from the CMU markers (1/2 stressed, 0 unstressed).
+    Monosyllables flex in real speech, so function words read as
+    unstressed and content monosyllables as wildcards.
+    """
+    stress = ""
+    for w in WORD_RE.findall(line):
+        ph = phones_for(w)
+        if not ph:
+            stress += "x"  # unknown word: one flexible syllable, at least
+            continue
+        syls = [p[-1] for p in ph.split() if p[-1].isdigit()]
+        if len(syls) == 1:
+            stress += "0" if w.lower() in STOPWORDS else "x"
+        else:
+            stress += "".join("1" if s in "12" else "0" for s in syls)
+    n = len(stress)
+    if n == 0:
+        return None
+    best_label, best_score = None, 0.0
+    if n >= 4:  # too short to call a meter
+        for name, foot in FEET.items():
+            pat = (foot * (n // len(foot) + 1))[:n]  # final foot may truncate
+            score = sum(a == "x" or a == b for a, b in zip(stress, pat)) / n
+            if score > best_score:
+                feet_count = round(n / len(foot))
+                meter = METER_NAMES.get(feet_count, f"{feet_count}-foot")
+                best_label, best_score = f"{name} {meter}", score
+    return {
+        "syl": n,
+        "stress": stress,
+        "label": best_label if best_score >= 0.75 else None,
+        "score": round(best_score, 2),
+    }
+
+
+# --------------------------------------------------------------------------
 # analysis
 # --------------------------------------------------------------------------
 
@@ -483,8 +533,16 @@ def analyze(draft: Draft):
          "slant": t["slant"] or groups_out[t["gid"]]["slant"]}
         for t in [*tokens, *phrases] if t["gid"] is not None
     ]
+    meter = []
+    for i, line in enumerate(lines):
+        if sids[i] is None:
+            continue
+        m = line_meter(line)
+        if m:
+            meter.append({"l": i, **m})
+
     return {"lines": lines, "tokens": toks_out,
-            "groups": groups_out, "stanzas": stanzas}
+            "groups": groups_out, "stanzas": stanzas, "meter": meter}
 
 
 # --------------------------------------------------------------------------
