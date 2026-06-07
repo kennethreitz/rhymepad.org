@@ -655,7 +655,7 @@ async function doLookup(){
     const data = await r.json();
     if(mode === 'mosaic'){
       if(!data.known){
-        resultsBox.innerHTML = `<p class="muted">No two-word mosaics for “${esc(word)}” — try a word with two or more syllables.</p>`;
+        resultsBox.innerHTML = `<p class="muted">No clean two-word split for “${esc(word)}” — mosaics need a sound the dictionary can rebuild from two words (try placement, creation, tonight).</p>`;
         return;
       }
       renderMosaics(word, data.words);

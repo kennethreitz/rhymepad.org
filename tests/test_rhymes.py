@@ -525,6 +525,8 @@ def test_mosaic_generator():
     assert "place meant" in words
     creation = {m["word"] for m in mosaics_for("creation", 20)}
     assert "way shun" in creation
+    tonight = {m["word"] for m in mosaics_for("tonight", 20)}
+    assert "a night" in tonight
 
 
 def test_word_info():

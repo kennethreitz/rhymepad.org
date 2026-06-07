@@ -32,6 +32,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     get_slant_index()
+    get_mosaic_indexes()
     yield
 
 
@@ -1133,7 +1134,12 @@ def mosaics_for(w: str, limit: int) -> list[dict]:
     phones = phones_for(w)
     if not phones:
         return []
-    rime = DIGITS.sub("", pronouncing.rhyming_part(phones)).split()
+    # anchor at the FIRST vowel: tonight (AH N AY T) splits into a + night
+    pl = DIGITS.sub("", phones).split()
+    vi = next((i for i, p in enumerate(pl) if p in ARPA_VOWELS), None)
+    if vi is None:
+        return []
+    rime = pl[vi:]
     pidx, ridx = get_mosaic_indexes()
     pairs: dict[str, float] = {}
     for i in range(1, len(rime)):
@@ -1147,15 +1153,14 @@ def mosaics_for(w: str, limit: int) -> list[dict]:
         # (placement -> place + meant, the EH collapsing to a schwa)
         tails = {right: 2.0, _squeeze(right): 0.0}
         for a in ridx.get(left, []):
-            if len(a) < 2:
-                continue
             for tail_key, bonus in tails.items():
                 for b in pidx.get(tail_key, []):
                     if a == w or b == w:
                         continue
                     phrase = f"{a} {b}"
                     score = (zipf_frequency(a, "en")
-                             + zipf_frequency(b, "en") + bonus)
+                             + zipf_frequency(b, "en") + bonus
+                             - (1.5 if len(a) < 2 else 0))
                     if score > pairs.get(phrase, 0):
                         pairs[phrase] = score
     ranked = sorted(pairs.items(), key=lambda kv: (-kv[1], kv[0]))
