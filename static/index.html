@@ -600,11 +600,11 @@ function render(){
                   : (p && (focusGid === null || p.g === focusGid)) ? p
                   : (w || p);
           let alpha = !t.ph ? (t.end ? 34 : 19) : (t.end ? 24 : 14);
-          if(focusGid !== null && t.g !== focusGid) alpha = Math.round(alpha * 0.22);
+          // the caret's family brightens; everything else stays itself
+          if(focusGid !== null && t.g === focusGid) alpha = Math.min(60, Math.round(alpha * 1.8));
           style += `background:color-mix(in srgb, ${colorOf(t)} ${alpha}%, transparent);`;
         }else if(op){
-          const opAlpha = focusGid === null ? 13 : 3;
-          style += `background:color-mix(in srgb, var(--ink-dim) ${opAlpha}%, transparent);`;
+          style += `background:color-mix(in srgb, var(--ink-dim) 13%, transparent);`;
         }
         if(al) style += `box-shadow:inset 0 -2px 0 0 color-mix(in srgb, var(--r${al.g % COLORS}) 75%, transparent);`;
         h += `<span class="hseg" style="${style}">${text}</span>`;
