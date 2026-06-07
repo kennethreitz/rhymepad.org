@@ -971,8 +971,21 @@ def analyze(draft: Draft):
             for e in entries:
                 e["target"] = mode
 
-    return {"lines": lines, "tokens": toks_out,
-            "groups": groups_out, "stanzas": stanzas, "meter": meter}
+    # per-word stress for the optional dots layer (2+ syllables only —
+    # a dot under every monosyllable is noise, not information)
+    stress_out = []
+    for t in tokens:
+        ph = phones_for(t["word"])
+        if not ph:
+            continue
+        st = "".join("1" if p[-1] in "12" else "0"
+                     for p in ph.split() if p[-1].isdigit())
+        if len(st) >= 2:
+            stress_out.append({"l": t["line"], "s": t["start"],
+                               "e": t["end"], "st": st})
+
+    return {"lines": lines, "tokens": toks_out, "groups": groups_out,
+            "stanzas": stanzas, "meter": meter, "stress": stress_out}
 
 
 # --------------------------------------------------------------------------

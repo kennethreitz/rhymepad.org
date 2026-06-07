@@ -93,7 +93,7 @@
     overflow: hidden;
   }
   /* highlight layer + textarea share the exact same box metrics */
-  #highlight, #editor {
+  #highlight, #stresslayer, #editor {
     position: absolute; inset: 0;
     margin: 0; border: 0;
     padding: 22px 24px;
@@ -109,6 +109,17 @@
     pointer-events: none;
     color: transparent;
     z-index: 1;
+  }
+  #stresslayer {
+    pointer-events: none;
+    color: transparent;
+    z-index: 0;
+  }
+  .sw { position: relative; }
+  .sd {
+    position: absolute; left: 0; right: 0; top: 1.18em;
+    text-align: center; font-size: 8px; letter-spacing: 2px;
+    line-height: 1; color: var(--accent-2); white-space: nowrap;
   }
   #editor {
     background: transparent;
@@ -146,6 +157,12 @@
   }
   .scheme-readout b { color: var(--accent-2); letter-spacing: 0.15em; }
   .scheme-readout .offline { color: var(--r6); letter-spacing: 0.02em; }
+  .mtoggle {
+    display: flex; align-items: center; gap: 6px;
+    color: var(--ink-dim); font-size: 12px; cursor: pointer; user-select: none;
+  }
+  .mtoggle input { accent-color: var(--accent); }
+  .mtoggle:hover { color: var(--ink); }
 
   /* ---- side panel ---- */
   aside {
@@ -232,7 +249,7 @@
     header { flex-direction: column; align-items: flex-start; gap: 2px; padding-bottom: 8px; }
     .brand { font-size: 24px; }
     .editor-shell { min-height: 55dvh; }
-    #highlight, #editor { font-size: 16px; }  /* sub-16px makes iOS zoom-jump */
+    #highlight, #stresslayer, #editor { font-size: 16px; }  /* sub-16px makes iOS zoom-jump */
     aside { min-height: 45dvh; }
     .toolbar { gap: 8px; }
     .scheme-readout { margin-left: 0; width: 100%; }
@@ -250,6 +267,7 @@
   <div class="editor-col">
     <div class="drafts-bar" id="draftsBar"></div>
     <div class="editor-shell">
+      <div id="stresslayer"></div>
       <div id="highlight"></div>
       <textarea id="editor" spellcheck="false" placeholder="Start writing. Leave a blank line between stanzas.
 Rhymes are detected phonetically — line endings get the underline,
@@ -258,6 +276,7 @@ Double-click any word to look it up on the right."></textarea>
     </div>
     <div class="toolbar">
       <button class="btn primary" id="copyBtn">Copy to clipboard</button>
+      <label class="mtoggle" title="Show syllable stress dots under each word"><input type="checkbox" id="stressToggle"> stress</label>
       <button class="btn" id="exportBtn" title="Download this draft as a color-coded PNG">Export image</button>
       <div class="scheme-readout" id="schemeReadout"></div>
     </div>
@@ -321,6 +340,10 @@ Double-click any word to look it up on the right."></textarea>
 ============================================================ */
 const editor = document.getElementById('editor');
 const highlight = document.getElementById('highlight');
+const stresslayer = document.getElementById('stresslayer');
+const stressToggle = document.getElementById('stressToggle');
+stressToggle.checked = false;
+stressToggle.addEventListener('change', render);
 const schemeReadout = document.getElementById('schemeReadout');
 const COLORS = 12;
 
@@ -525,9 +548,34 @@ function render(){
     html += h + '\n';
   });
   highlight.innerHTML = html;
+  renderStress(lines);
   highlight.scrollTop = editor.scrollTop;
   highlight.scrollLeft = editor.scrollLeft;
   buildReadout();
+}
+
+function renderStress(lines){
+  if(!stressToggle.checked){ stresslayer.innerHTML = ''; return; }
+  const byLine = {};
+  if(analysis && analysis.stress) analysis.stress.forEach(s=>{ (byLine[s.l] ||= []).push(s); });
+  let html = '';
+  lines.forEach((line, i)=>{
+    const fresh = analysis && analysis.lines[i] === line;
+    const spans = (fresh ? (byLine[i] || []) : []).slice().sort((a,b)=>a.s-b.s);
+    let pos = 0, h2 = '';
+    spans.forEach(s=>{
+      if(s.s < pos) return;
+      h2 += esc(line.slice(pos, s.s));
+      const dots = [...s.st].map(c=> c === '0' ? '○' : '●').join('');
+      h2 += `<span class="sw">${esc(line.slice(s.s, s.e))}<span class="sd">${dots}</span></span>`;
+      pos = s.e;
+    });
+    h2 += esc(line.slice(pos));
+    html += h2 + '\n';
+  });
+  stresslayer.innerHTML = html;
+  stresslayer.scrollTop = editor.scrollTop;
+  stresslayer.scrollLeft = editor.scrollLeft;
 }
 
 function caretLine(){
@@ -563,7 +611,7 @@ function buildReadout(){
 }
 
 editor.addEventListener('input', ()=>{ render(); analyzeSoon(); });
-editor.addEventListener('scroll', ()=>{ highlight.scrollTop = editor.scrollTop; highlight.scrollLeft = editor.scrollLeft; });
+editor.addEventListener('scroll', ()=>{ highlight.scrollTop = stresslayer.scrollTop = editor.scrollTop; highlight.scrollLeft = stresslayer.scrollLeft = editor.scrollLeft; });
 editor.addEventListener('keyup', buildReadout);
 editor.addEventListener('click', buildReadout);
 
