@@ -375,3 +375,11 @@ def test_mosaic_triples_kanye_power():
             "Screams from the haters, got a nice ring to it\n"
             "I guess every superhero need his theme music")
     group_with(text, "mean to it", "seen do it", "theme music")
+
+
+def test_mosaic_finds_perfect_members_other_anchor():
+    # Gambino: mastermind founds a perfect group with rind (AY N D), but
+    # its first-stress run (AE..AY) is what "pass the time" rhymes with
+    text = ("Gambino is a mastermind, fuck a bitch to pass the time\n"
+            "Mass appeal, orange rind, smoke your green, I'm spendin' mine")
+    group_with(text, "mastermind", "rind", "pass the time")

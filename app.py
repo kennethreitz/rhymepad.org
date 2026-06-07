@@ -525,6 +525,18 @@ def analyze(draft: Draft):
             if k:
                 for s in {t["sid"] for t in g["toks"]}:
                     out.setdefault((s, k), gi)
+            if kind == "multi":
+                # members may advertise their own HIGH-SPECIFICITY mosaic
+                # anchors (2+ full vowels): mastermind founds on AY N D
+                # with rind, but its AE..AY run is what "pass the time"
+                # needs to find
+                for t in g["toks"]:
+                    if " " in t["word"]:
+                        continue
+                    for mk in set(multi_keys(t["word"])):
+                        if (mk.startswith("m:")
+                                and sum(v != "x" for v in mk[2:].split()) >= 2):
+                            out.setdefault((t["sid"], mk), gi)
             elif kind == "multi2":
                 # vowel-only founding keys can't carry a coda, but if 2+
                 # members agree on one (orange + pourage both AO-R-schwa),
@@ -617,11 +629,12 @@ def analyze(draft: Draft):
         b_gi = next((gi for s, e, gi in spans if s < p["end"] <= e), None)
         p["halves"] = (a_gi, b_gi)
         if a_gi is not None and b_gi is not None:
-            # both ends already rhyme — the phrase only matters if it
-            # ties into a THIRD family (four-inch joining the orange/
-            # storage clan while four sits with door and inch with hinge)
+            # both ends already rhyme — the phrase still matters if it
+            # ties somewhere beyond its anchor's own family (four-inch
+            # joining the orange clan; "pass the time" reaching the
+            # group where mastermind advertises its AE..AY run)
             gi = group_by_multi.get((p["sid"], key))
-            if gi is not None and gi != a_gi and gi != b_gi:
+            if gi is not None and gi != a_gi:
                 raw_groups[gi]["toks"].append(p)
                 p["slant"] = True
                 grouped.add(id(p))
