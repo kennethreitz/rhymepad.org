@@ -31,9 +31,11 @@ Then open <http://127.0.0.1:8000>.
 ## API
 
 - `POST /api/analyze` `{"text": "..."}` → token spans, rhyme groups,
-  per-stanza schemes
-- `GET /api/lookup?word=light&mode=rhyme|near` → frequency-ranked
-  rhymes / near rhymes, grouped by syllable count
+  per-stanza schemes, per-line meter
+- `GET /api/lookup?word=light&mode=rhyme|near|syn` → frequency-ranked
+  rhymes / near rhymes (by syllable count) and WordNet synonyms (by
+  part of speech)
 
-Synonyms come from the free [Datamuse](https://www.datamuse.com/api/)
-API, client-side.
+Dictionary definitions in the UI come from the free
+[dictionaryapi.dev](https://dictionaryapi.dev/); everything else is
+served locally.

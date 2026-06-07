@@ -297,3 +297,14 @@ def test_perfect_subgroup_fuses_with_slant_family():
             "Unplugged toaster")
     group_with(text, "soldier", "shoulder", "older", "colder", "holster",
                "coaster", "roaster", "poster", "toaster")
+
+
+def test_lookup_synonyms_wordnet():
+    words = {w["word"] for w in lookup("happy", mode="syn")["words"]}
+    assert "glad" in words
+    big = {w["word"]: w["pos"] for w in lookup("big", mode="syn")["words"]}
+    assert "large" in big and big["large"] == "adjective"
+
+
+def test_lookup_synonyms_unknown_word():
+    assert lookup("xqzzqx", mode="syn")["known"] is False

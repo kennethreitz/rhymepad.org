@@ -200,6 +200,7 @@
     text-transform: uppercase; letter-spacing: .06em; margin-right: 4px;
   }
   .btn.small { padding: 5px 10px; font-size: 12px; }
+  .def-actions { display: flex; gap: 8px; }
   .chip {
     font-size: 13px; background: var(--panel-2); border: 1px solid var(--line);
     color: var(--ink); padding: 5px 10px; border-radius: 999px; cursor: pointer;
@@ -277,7 +278,7 @@ Double-click any word to look it up on the right."></textarea>
       </div>
       <div id="defBox"></div>
       <div id="lookupResults">
-        <p class="muted">Type a word and hit Go, or double-click a word in your draft. Click any result to see its definition.</p>
+        <p class="muted">Type a word and hit Go for rhymes. Double-click a word in your draft for its definition. Click any result chip for its definition too.</p>
       </div>
       <div class="legend">
         <div class="res-label">Current stanza</div>
@@ -544,7 +545,11 @@ editor.addEventListener('click', ()=>{ buildReadout(); buildLegend(); });
 editor.addEventListener('dblclick', ()=>{
   const sel = editor.value.slice(editor.selectionStart, editor.selectionEnd)
     .trim().replace(/[^A-Za-z']/g,'');
-  if(sel){ document.getElementById('lookupInput').value = sel; doLookup(); }
+  if(sel){
+    document.getElementById('lookupInput').value = sel;
+    tab('lookup');
+    showDefinition(sel);
+  }
 });
 
 /* ---------- insert at cursor ---------- */
@@ -582,13 +587,15 @@ async function doLookup(){
   defBox.innerHTML = '';
   resultsBox.innerHTML = '<p class="muted">Searching…</p>';
   try{
+    const r = await fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=${mode}`);
+    const data = await r.json();
     if(mode === 'syn'){
-      const r = await fetch(`https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&ml=${encodeURIComponent(word)}&max=60`);
-      const data = await r.json();
-      renderChips(`Synonyms / related for “${esc(word)}”`, data.map(d=>d.word));
+      if(!data.known){
+        resultsBox.innerHTML = `<p class="muted">No synonyms found for “${esc(word)}”.</p>`;
+        return;
+      }
+      renderByPos(word, data.words);
     }else{
-      const r = await fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=${mode}`);
-      const data = await r.json();
       if(!data.known){
         resultsBox.innerHTML = `<p class="muted">“${esc(word)}” isn't in the pronunciation dictionary.</p>`;
         return;
@@ -619,9 +626,16 @@ function defCard(word, inner){
       <div class="defhead"><b>${esc(word)}</b><span class="phon" id="defPhon"></span>
         <span class="defx" title="Dismiss">×</span></div>
       ${inner}
-      <div class="def-actions"><button class="btn small" id="defInsert">Insert at cursor</button></div>
+      <div class="def-actions">
+        <button class="btn small" id="defInsert">Insert at cursor</button>
+        <button class="btn small" id="defRhymes">Rhymes</button>
+      </div>
     </div>`;
   defBox.querySelector('#defInsert').addEventListener('click', ()=> insertAtCursor(word));
+  defBox.querySelector('#defRhymes').addEventListener('click', ()=>{
+    document.getElementById('lookupInput').value = word;
+    doLookup();
+  });
   defBox.querySelector('.defx').addEventListener('click', ()=>{ defBox.innerHTML=''; });
 }
 async function showDefinition(word){
@@ -647,6 +661,21 @@ function renderChips(label, words){
   resultsBox.innerHTML = `<div class="res-label">${label}</div>` + chipHtml(words.slice(0,50));
   wireChips();
 }
+function renderByPos(word, items){
+  if(!items.length){ resultsBox.innerHTML = `<p class="muted">No synonyms for “${esc(word)}”.</p>`; return; }
+  const byPos = {};
+  items.forEach(d=>{ (byPos[d.pos || 'related'] ||= []).push(d.word); });
+  let h = `<div class="res-label">Synonyms for “${esc(word)}”</div>`;
+  ['noun','verb','adjective','adverb','related'].forEach(pos=>{
+    if(!byPos[pos]) return;
+    h += `<div class="res-label">${pos}s</div>` + chipHtml(byPos[pos]);
+    delete byPos[pos];
+  });
+  Object.keys(byPos).forEach(pos=>{ h += `<div class="res-label">${esc(pos)}</div>` + chipHtml(byPos[pos]); });
+  resultsBox.innerHTML = h;
+  wireChips();
+}
+
 function renderBySyllable(word, items, label){
   if(!items.length){ resultsBox.innerHTML = `<p class="muted">No results for “${esc(word)}”.</p>`; return; }
   const bySyl = {};

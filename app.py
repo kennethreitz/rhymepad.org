@@ -27,6 +27,10 @@ async def lifespan(app: FastAPI):
         g2p_phones("warmup")
     except Exception:
         pass  # model unavailable; spelling fallbacks still work
+    try:
+        get_wordnet()
+    except Exception:
+        pass
     get_slant_index()
     yield
 
@@ -675,6 +679,46 @@ def get_slant_index() -> dict[str, set[str]]:
     return _slant_index
 
 
+_wordnet = None
+
+
+def get_wordnet():
+    """WordNet via NLTK (already a g2p-en dependency), data on demand."""
+    global _wordnet
+    if _wordnet is None:
+        from nltk.corpus import wordnet as wn
+        try:
+            wn.synsets("test")
+        except LookupError:
+            import nltk
+            nltk.download("wordnet", quiet=True)
+            nltk.download("omw-1.4", quiet=True)
+        _wordnet = wn
+    return _wordnet
+
+
+POS_NAMES = {"n": "noun", "v": "verb", "a": "adjective",
+             "s": "adjective", "r": "adverb"}
+
+
+def synonyms_for(w: str, limit: int) -> list[dict]:
+    """Sense-grouped synonyms from WordNet, frequency-ranked."""
+    wn = get_wordnet()
+    seen: dict[str, str] = {}
+    for ss in wn.synsets(w):
+        lemmas = list(ss.lemmas())
+        if ss.pos() in ("a", "s"):  # adjectives: pull in the satellites
+            for sim in ss.similar_tos():
+                lemmas.extend(sim.lemmas())
+        for lemma in lemmas:
+            name = lemma.name().replace("_", " ").lower()
+            if name != w and re.fullmatch(r"[a-z' -]+", name):
+                seen.setdefault(name, POS_NAMES.get(ss.pos(), ss.pos()))
+    ranked = sorted(seen.items(),
+                    key=lambda kv: (-zipf_frequency(kv[0], "en"), kv[0]))
+    return [{"word": n, "pos": p} for n, p in ranked[:limit]]
+
+
 def _ranked(words, exclude: set[str], limit: int) -> list[dict]:
     scored = []
     for w in set(words):
@@ -695,6 +739,9 @@ def _ranked(words, exclude: set[str], limit: int) -> list[dict]:
 @app.get("/api/lookup")
 def lookup(word: str, mode: str = "rhyme", limit: int = 60):
     w = word.strip().lower()
+    if mode == "syn":
+        words = synonyms_for(w, limit)
+        return {"word": w, "mode": mode, "known": bool(words), "words": words}
     phones = phones_for(w)
     if not phones:
         return {"word": w, "mode": mode, "known": False, "words": []}
