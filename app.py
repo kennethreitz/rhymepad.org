@@ -85,6 +85,14 @@ def _norm_r(phones: str) -> str:
     return " ".join(pl)
 
 
+#: corrections for the CMU dict's occasional howlers — the dict entry is
+#: kept as a secondary candidate, the fix leads
+OVERRIDES = {
+    "stasis": "S T EY1 S IH0 S",  # CMU: "STAH-seez"
+    "kinda": "K AY1 N D AH0",     # CMU: "KIH-nda"
+}
+
+
 @lru_cache(maxsize=None)
 def phones_candidates(word: str) -> tuple[str, ...]:
     """Plausible pronunciations for a word: CMU dict variants, a few
@@ -94,6 +102,8 @@ def phones_candidates(word: str) -> tuple[str, ...]:
     so the rhyme passes get to match on any of them."""
     w = word.lower().strip("'")
     cands = list(pronouncing.phones_for_word(w)[:3])
+    if w in OVERRIDES:
+        cands.insert(0, OVERRIDES[w])
     if not cands and w.endswith("in"):  # runnin' -> running
         cands = pronouncing.phones_for_word(w + "g")[:1]
     if not cands and w.endswith("'s"):

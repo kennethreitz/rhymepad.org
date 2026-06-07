@@ -430,3 +430,8 @@ def test_weak_ending_rhymes_at_line_end():
             "Red and yellow then came to be\n"
             "Reaching out to me")
     group_with(text, "see", "infancy", "be", "me")
+
+
+def test_cmu_override_stasis():
+    # CMU transcribes stasis as "STAH-seez"; everyone says STAY-sis
+    group_with("Oasis of stasis", "oasis", "stasis")
