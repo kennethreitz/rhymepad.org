@@ -540,13 +540,31 @@ def analyze(draft: Draft):
          "slant": t["slant"] or groups_out[t["gid"]]["slant"]}
         for t in [*tokens, *phrases] if t["gid"] is not None
     ]
-    meter = []
+    meter, meter_by_line = [], {}
     for i, line in enumerate(lines):
         if sids[i] is None:
             continue
         m = line_meter(line)
         if m:
-            meter.append({"l": i, **m})
+            entry = {"l": i, **m, "off": False}
+            meter.append(entry)
+            meter_by_line[i] = entry
+
+    # meter coaching: when a stanza has a clear syllable pattern, flag
+    # the lines that break it
+    for s, lns in stanza_lines.items():
+        entries = [meter_by_line[i] for i in lns if i in meter_by_line]
+        if len(entries) < 3:
+            continue
+        counts = [e["syl"] for e in entries]
+        # mode with +-1 tolerance: the count that covers the most lines
+        mode = max(set(counts), key=lambda c: sum(abs(v - c) <= 1 for v in counts))
+        covered = sum(abs(v - mode) <= 1 for v in counts)
+        if covered / len(entries) >= 0.6:
+            for e in entries:
+                e["off"] = abs(e["syl"] - mode) > 1
+            for e in entries:
+                e["target"] = mode
 
     return {"lines": lines, "tokens": toks_out,
             "groups": groups_out, "stanzas": stanzas, "meter": meter}

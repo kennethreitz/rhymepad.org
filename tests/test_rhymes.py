@@ -222,3 +222,20 @@ def test_trailing_schwa_trimmed_militia_commissioner():
     text = ("Swagger down pat, call my shit Patricia\n"
             "Young Money militia, and I am the commissioner")
     group_with(text, "patricia", "militia", "commissioner")
+
+
+def test_meter_coaching_flags_outlier_line():
+    text = ("I walk the lonely road tonight\n"
+            "I hold the heavy stone of light\n"
+            "I call the fading stars to fight\n"
+            "and everybody wonders where the time has gone")
+    res = analyze(Draft(text=text))
+    flagged = [m["l"] for m in res["meter"] if m["off"]]
+    assert flagged == [3]
+    assert res["meter"][3]["target"] == 8
+
+
+def test_meter_coaching_needs_a_pattern_to_break():
+    # two lines of wildly different lengths: no dominant pattern, no flags
+    res = analyze(Draft(text="short line here\na very much longer line that runs on and on"))
+    assert not any(m["off"] for m in res["meter"])

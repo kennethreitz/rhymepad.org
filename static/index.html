@@ -124,6 +124,11 @@
   .rh.slant.end {
     box-shadow: inset 0 -2px 0 0 color-mix(in srgb, var(--c) 45%, transparent);
   }
+  .offbeat {
+    text-decoration: underline wavy color-mix(in srgb, var(--r6) 45%, transparent);
+    text-decoration-skip-ink: none;
+    text-underline-offset: 7px;
+  }
   .toolbar {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   }
@@ -494,7 +499,8 @@ function render(){
       pos = t.e;
     });
     h += esc(line.slice(pos));
-    html += h + '\n';
+    const m = fresh && analysis.meter ? analysis.meter.find(x=>x.l===i) : null;
+    html += (m && m.off ? `<span class="offbeat">${h}</span>` : h) + '\n';
   });
   highlight.innerHTML = html;
   highlight.scrollTop = editor.scrollTop;
@@ -522,7 +528,11 @@ function buildReadout(){
   const parts = [];
   const ln = caretLine();
   const m = analysis && analysis.meter ? analysis.meter.find(x=>x.l===ln) : null;
-  if(m) parts.push(`${m.syl} syl` + (m.label ? ` · ${m.label}` : ''));
+  if(m){
+    let p = `${m.syl} syl` + (m.label ? ` · ${m.label}` : '');
+    if(m.off) p += ` <span class="offline">· breaks stanza meter (~${m.target} syl)</span>`;
+    parts.push(p);
+  }
   const st = caretStanza();
   if(st && st.scheme) parts.push(`scheme <b>${st.scheme.toUpperCase().split('').join(' ')}</b>`);
   schemeReadout.innerHTML = parts.join(' &nbsp;&nbsp; ');
