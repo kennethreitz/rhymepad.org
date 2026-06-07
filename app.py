@@ -476,7 +476,22 @@ def analyze(draft: Draft):
     for i, line in enumerate(lines):
         if sids[i] is None:
             continue
-        matches = list(WORD_RE.finditer(line))
+        # ad-libs — anything in (parens) mid-line — are delivery, not
+        # text: they don't rhyme and can't claim the line-ending slot
+        adlib, depth, astart = [], 0, None
+        for j, ch in enumerate(line):
+            if ch == "(":
+                if depth == 0:
+                    astart = j
+                depth += 1
+            elif ch == ")" and depth:
+                depth -= 1
+                if depth == 0:
+                    adlib.append((astart, j + 1))
+        if depth:
+            adlib.append((astart, len(line)))
+        matches = [m for m in WORD_RE.finditer(line)
+                   if not any(s <= m.start() < e for s, e in adlib)]
         for j, m in enumerate(matches):
             tokens.append({
                 "line": i, "start": m.start(), "end": m.end(),

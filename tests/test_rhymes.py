@@ -533,3 +533,12 @@ def test_word_inside_grouped_phrase_still_rhymes():
             "wastin' all this time with style")
     group_with(text, "mind", "time")
     group_with(text, "while", "style")
+
+
+def test_inline_adlibs_excluded():
+    # (yeah) is delivery, not text — bunch keeps the line-ending slot
+    text = ("Six-foot, seven-foot, eight-foot bunch (yeah)\n"
+            "I roll with the gang, throw a punch (what)")
+    assert scheme(text) == "aa"
+    assert "yeah" not in highlighted(text)
+    group_with(text, "bunch", "punch")

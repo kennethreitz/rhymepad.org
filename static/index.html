@@ -602,6 +602,10 @@ function buildReadout(){
     parts.push(p);
   }
   const st = caretStanza();
+  if(st){
+    const bi = st.lines.indexOf(ln);
+    if(bi >= 0) parts.unshift(`bar ${bi + 1}/${st.lines.length}`);
+  }
   if(st && st.scheme){
     const sch = st.scheme.toUpperCase();
     const shown = sch.slice(0, 16).split('').join(' ') + (sch.length > 16 ? ' …' : '');
