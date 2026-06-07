@@ -980,7 +980,7 @@ def analyze(draft: Draft):
             continue
         st = "".join("1" if p[-1] in "12" else "0"
                      for p in ph.split() if p[-1].isdigit())
-        if len(st) >= 2:
+        if st:  # one dot even for monosyllables
             stress_out.append({"l": t["line"], "s": t["start"],
                                "e": t["end"], "st": st})
 
