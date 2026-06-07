@@ -684,9 +684,10 @@ function renderRhymes(word, data){
    that break their stanza's syllable pattern.
 ============================================================ */
 const meterToggle = document.getElementById('meterToggle');
-meterToggle.checked = localStorage.getItem('rhymepad.meter') === '1';
+// off by default; the v2 key resets anyone whose old toggle stuck on
+meterToggle.checked = localStorage.getItem('rhymepad.meter.v2') === '1';
 meterToggle.addEventListener('change', ()=>{
-  try{ localStorage.setItem('rhymepad.meter', meterToggle.checked ? '1' : '0'); }catch(e){}
+  try{ localStorage.setItem('rhymepad.meter.v2', meterToggle.checked ? '1' : '0'); }catch(e){}
   render();
 });
 
