@@ -366,3 +366,12 @@ def test_the_full_orange_verse():
                "four-inch", "door hinge")
     group_with(text, "four", "door", "george")
     group_with(text, "inch", "hinge")
+
+
+def test_mosaic_triples_kanye_power():
+    text = ("I'm living in that 21st century\n"
+            "Doing something mean to it\n"
+            "Do it better than anybody you ever seen do it\n"
+            "Screams from the haters, got a nice ring to it\n"
+            "I guess every superhero need his theme music")
+    group_with(text, "mean to it", "seen do it", "theme music")

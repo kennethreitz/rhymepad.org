@@ -448,6 +448,40 @@ def analyze(draft: Draft):
                          or b["word"].lower() in STOPWORDS),
             })
 
+    # mosaic triples: three-word runs whose vowel run is the rhyme —
+    # "mean to it" / "seen do it" / "theme music" (IY UW x). Anchor must
+    # carry content; the tail words may be anything pronounceable.
+    for toks in line_toks.values():
+        for a, b, c in zip(toks, toks[1:], toks[2:]):
+            if a["word"].lower() in STOPWORDS:
+                continue
+            pa, pb, pc = (phones_for(a["word"]), phones_for(b["word"]),
+                          phones_for(c["word"]))
+            if not (pa and pb and pc):
+                continue
+            tail_vowels = _all_vowels(pb) + _all_vowels(pc)
+            if not any(v not in REDUCED for v in tail_vowels):
+                continue  # the mosaic must span words: "mean TO it" does,
+                          # "methamphetamine with the" is just its anchor
+            vowels = _tail_vowels(pa) + tail_vowels
+            if len(vowels) < 3:
+                continue
+            pl = pa.split()
+            start = 0
+            for i in range(len(pl) - 1, -1, -1):
+                if pl[i][-1] in "12":
+                    start = i
+                    break
+            phrases.append({
+                "line": a["line"], "start": a["start"], "end": c["end"],
+                "word": " ".join(w["word"].lower() for w in (a, b, c)),
+                "is_end": c["is_end"], "sid": a["sid"], "gid": None,
+                "slant": False, "vowels": vowels,
+                "rime": DIGITS.sub(
+                    "", " ".join(pl[start:] + pb.split() + pc.split())),
+                "weak": False,
+            })
+
     # pass 1: perfect rhymes (shared rime), anywhere in a line — this is
     # what catches internal rhymes. Phrases compete too, so "stir up"
     # perfect-rhymes "syrup" even while its "up" rhymes with "cup".
@@ -573,11 +607,17 @@ def analyze(draft: Draft):
             key = _m2_key(p["rime"].split())
         if not key:
             continue
+        if p["word"].count(" ") == 2:
+            # mosaic triples must carry at least two full vowels —
+            # anchor + schwa-tails ("Sleep is the") prove nothing
+            if sum(v != "x" for v in key[2:].split()) < 2:
+                continue
         spans = grouped_spans[p["line"]]
         a_gi = next((gi for s, e, gi in spans if s <= p["start"] < e), None)
         b_gi = next((gi for s, e, gi in spans if s < p["end"] <= e), None)
+        p["halves"] = (a_gi, b_gi)
         if a_gi is not None and b_gi is not None:
-            # both halves already rhyme — the phrase only matters if it
+            # both ends already rhyme — the phrase only matters if it
             # ties into a THIRD family (four-inch joining the orange/
             # storage clan while four sits with door and inch with hinge)
             gi = group_by_multi.get((p["sid"], key))
@@ -585,6 +625,10 @@ def analyze(draft: Draft):
                 raw_groups[gi]["toks"].append(p)
                 p["slant"] = True
                 grouped.add(id(p))
+            else:
+                # or if it can seed a family with non-mirror siblings
+                # (mean to it / seen do it / theme music)
+                by_multi[(p["sid"], key)].append(p)
             continue
         attach_or_collect(p, key, by_multi, group_by_multi)
 
@@ -594,9 +638,17 @@ def analyze(draft: Draft):
     for (sid, key), toks in sorted(by_multi.items(),
                                    key=lambda kv: (-len(kv[1]), kv[0][1])):
         toks = [t for t in toks if id(t) not in grouped]
-        if len(toks) >= 2 and len({t["word"].split()[0] for t in toks}) >= 2:
-            raw_groups.append({"toks": toks, "slant": True, "key": key})
-            grouped.update(id(t) for t in toks)
+        if len(toks) < 2 or len({t["word"].split()[0] for t in toks}) < 2:
+            continue
+        # an all-phrase bucket whose members mirror the same two word
+        # groups is pure redundancy (oh my / go rhyme over oh+go, my+rhyme)
+        halves = {t.get("halves") for t in toks}
+        if (len(halves) == 1
+                and None not in halves
+                and None not in next(iter(halves))):
+            continue
+        raw_groups.append({"toks": toks, "slant": True, "key": key})
+        grouped.update(id(t) for t in toks)
 
     # pass 4: consonance-aware slant anywhere in a line — last stressed
     # vowel + first coda consonant, so bliss / whisps / exist (IH S) group

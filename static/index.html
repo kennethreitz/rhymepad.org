@@ -65,11 +65,12 @@
   .drafts-bar { display: flex; gap: 6px; overflow-x: auto; flex: none; padding-bottom: 2px; }
   .dtab {
     display: flex; align-items: center; gap: 8px;
-    font-size: 12px; padding: 6px 12px;
+    font-size: 12px; padding: 6px 12px; max-width: 170px;
     background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
     color: var(--ink-dim); cursor: pointer; white-space: nowrap;
-    transition: all .15s; user-select: none;
+    transition: all .15s; user-select: none; flex: none;
   }
+  .dtab .dtitle { overflow: hidden; text-overflow: ellipsis; }
   .dtab:hover { color: var(--ink); }
   .dtab.active { color: var(--ink); border-color: var(--accent); background: rgba(232,129,74,0.08); }
   .dtab .x { color: var(--ink-dim); font-size: 13px; line-height: 1; }
@@ -511,7 +512,11 @@ function buildReadout(){
     parts.push(p);
   }
   const st = caretStanza();
-  if(st && st.scheme) parts.push(`scheme <b>${st.scheme.toUpperCase().split('').join(' ')}</b>`);
+  if(st && st.scheme){
+    const sch = st.scheme.toUpperCase();
+    const shown = sch.slice(0, 16).split('').join(' ') + (sch.length > 16 ? ' …' : '');
+    parts.push(`scheme <b>${shown}</b>`);
+  }
   schemeReadout.innerHTML = parts.join(' &nbsp;&nbsp; ');
 }
 
