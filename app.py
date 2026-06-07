@@ -980,6 +980,37 @@ def analyze(draft: Draft):
             fused2.append(core)
         raw_groups = fused2
 
+    # a word group living ENTIRELY inside one family's phrases is a
+    # mirror of that family — four/door inside «four-inch»/«door hinge»:
+    # the compound reading wins and the mirror dissolves, so the phrase
+    # color paints the words too
+    grouped_phrase_spans = []
+    for gi, g in enumerate(raw_groups):
+        for t in g["toks"]:
+            if " " in t["word"]:
+                grouped_phrase_spans.append(
+                    (t["line"], t["start"], t["end"], gi))
+    if grouped_phrase_spans:
+        kept_groups = []
+        for gi, g in enumerate(raw_groups):
+            if any(" " in t["word"] for t in g["toks"]):
+                kept_groups.append(g)
+                continue
+            covers: set[int] = set()
+            all_covered = True
+            for t in g["toks"]:
+                f = {pg for (pl, ps, pe, pg) in grouped_phrase_spans
+                     if pl == t["line"] and ps <= t["start"]
+                     and t["end"] <= pe and pg != gi}
+                if not f:
+                    all_covered = False
+                    break
+                covers |= f
+            if all_covered and len(covers) == 1:
+                continue
+            kept_groups.append(g)
+        raw_groups = kept_groups
+
     # stable colors: order groups by first appearance
     raw_groups.sort(key=lambda g: min((t["line"], t["start"]) for t in g["toks"]))
     groups_out = []

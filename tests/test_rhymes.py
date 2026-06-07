@@ -364,8 +364,11 @@ def test_the_full_orange_verse():
             "and ate porridge with George")
     group_with(text, "orange", "storage", "porridge",
                "four-inch", "door hinge")
+    # four/door/george keep their own thread (george is outside any
+    # phrase), but inch/hinge are pure mirrors of the grouped phrases —
+    # the compound reading wins and paints them orange
     group_with(text, "four", "door", "george")
-    group_with(text, "inch", "hinge")
+    assert "hinge" not in highlighted(text)  # only «door hinge» paints
 
 
 def test_mosaic_triples_kanye_power():
