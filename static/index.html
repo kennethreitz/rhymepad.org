@@ -207,6 +207,8 @@
     transition: all .12s;
   }
   .chip:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+  .chip.near { border-style: dashed; color: var(--ink-dim); }
+  .chip.near:hover { color: var(--accent); }
   .muted { color: var(--ink-dim); font-size: 13px; line-height: 1.6; }
   .res-label { font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-dim); margin:16px 0 4px; }
 
@@ -270,7 +272,6 @@ Double-click any word to look it up on the right."></textarea>
       </div>
       <div class="seg" id="modeSeg">
         <button class="active" data-mode="rhyme">Rhymes</button>
-        <button data-mode="near">Near</button>
         <button data-mode="syn">Synonyms</button>
       </div>
       <div id="defBox"></div>
@@ -583,16 +584,16 @@ async function doLookup(){
         resultsBox.innerHTML = `<p class="muted">“${esc(word)}” isn't in the pronunciation dictionary.</p>`;
         return;
       }
-      renderBySyllable(word, data.words, mode === 'near' ? 'Near rhymes' : 'Rhymes');
+      renderRhymes(word, data);
     }
   }catch(err){
     resultsBox.innerHTML = `<p class="muted">Lookup failed — is the backend running? (${esc(String(err))})</p>`;
   }
 }
 
-function chipHtml(words){
+function chipHtml(words, cls){
   return '<div class="results">' +
-    words.map(w=>`<span class="chip" data-w="${esc(w)}">${esc(w)}</span>`).join('') +
+    words.map(w=>`<span class="chip${cls ? ' ' + cls : ''}" data-w="${esc(w)}">${esc(w)}</span>`).join('') +
     '</div>';
 }
 function wireChips(){
@@ -658,14 +659,26 @@ function renderByPos(word, items){
   wireChips();
 }
 
-function renderBySyllable(word, items, label){
-  if(!items.length){ resultsBox.innerHTML = `<p class="muted">No results for “${esc(word)}”.</p>`; return; }
+function syllableSections(items, cls){
   const bySyl = {};
   items.forEach(d=>{ (bySyl[d.syl || 0] ||= []).push(d.word); });
-  let h = `<div class="res-label">${label} for “${esc(word)}”</div>`;
-  Object.keys(bySyl).sort((a,b)=>a-b).forEach(k=>{
-    h += `<div class="res-label">${k == 0 ? '?' : k} syllable${k == 1 ? '' : 's'}</div>` + chipHtml(bySyl[k]);
-  });
+  return Object.keys(bySyl).sort((a,b)=>a-b).map(k=>
+    `<div class="res-label">${k == 0 ? '?' : k} syllable${k == 1 ? '' : 's'}</div>` + chipHtml(bySyl[k], cls)
+  ).join('');
+}
+function renderRhymes(word, data){
+  const near = data.near || [];
+  if(!data.words.length && !near.length){
+    resultsBox.innerHTML = `<p class="muted">No rhymes for “${esc(word)}”.</p>`;
+    return;
+  }
+  let h = '';
+  if(data.words.length){
+    h += `<div class="res-label">Rhymes for “${esc(word)}”</div>` + syllableSections(data.words);
+  }
+  if(near.length){
+    h += `<div class="res-label">Near rhymes</div>` + chipHtml(near.map(d=>d.word), 'near');
+  }
   resultsBox.innerHTML = h;
   wireChips();
 }

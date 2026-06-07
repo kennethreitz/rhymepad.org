@@ -316,3 +316,9 @@ def test_ine_ending_gets_een_candidate():
     text = ("Even ketamine or methamphetamine with the minithin\n"
             "It better be at least seventy or three-hundred milligram")
     group_with(text, "ketamine", "methamphetamine")
+
+
+def test_rhyme_mode_includes_near():
+    data = lookup("hold", mode="rhyme")
+    assert "gold" in {w["word"] for w in data["words"]}
+    assert "home" in {w["word"] for w in data["near"]}

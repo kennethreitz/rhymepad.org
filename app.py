@@ -786,14 +786,16 @@ def lookup(word: str, mode: str = "rhyme", limit: int = 60):
     phones = phones_for(w)
     if not phones:
         return {"word": w, "mode": mode, "known": False, "words": []}
+    k = _slant_from_phones(phones)
+    perfect = set(pronouncing.rhymes(w))
+    near_cands = (get_slant_index().get(k, set()) - perfect) if k else set()
     if mode == "near":
-        k = _slant_from_phones(phones)
-        perfect = set(pronouncing.rhymes(w))
-        cands = (get_slant_index().get(k, set()) - perfect) if k else set()
-        words = _ranked(cands, {w}, limit)
-    else:
-        words = _ranked(pronouncing.rhymes(w), {w}, limit)
-    return {"word": w, "mode": mode, "known": True, "words": words}
+        words = _ranked(near_cands, {w}, limit)
+        return {"word": w, "mode": mode, "known": True, "words": words}
+    # rhyme mode carries both: perfect in "words", slant in "near"
+    words = _ranked(perfect, {w}, limit)
+    near = _ranked(near_cands, {w}, limit // 2)
+    return {"word": w, "mode": mode, "known": True, "words": words, "near": near}
 
 
 app.mount("/", StaticFiles(directory=Path(__file__).parent / "static",
