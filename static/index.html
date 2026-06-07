@@ -290,7 +290,6 @@ Double-click any word to look it up on the right."></textarea>
     <div class="toolbar">
       <button class="btn primary" id="copyBtn">Copy to clipboard</button>
       <button class="btn" id="exportBtn" title="Download this draft as a color-coded PNG">Save PNG</button>
-      <button class="btn" id="downloadBtn" title="Download this draft as a plain text file">Save TXT</button>
       <button class="btn" id="shareBtn" title="Share via the system sheet — Notes, Messages, anywhere" hidden>Share</button>
       <label class="mtoggle" title="Color-code rhyme families"><input type="checkbox" id="rhymeToggle" checked> rhyme</label>
       <label class="mtoggle" title="Underline words that share an initial sound"><input type="checkbox" id="allitToggle"> alliteration</label>
@@ -1130,11 +1129,6 @@ lookupInput.addEventListener('paste', e=>{
 /* ============================================================
    FILES IN, FILES OUT — drafts shouldn't be hostage to localStorage
 ============================================================ */
-function draftFilename(){
-  const doc = docsState.docs.find(d=>d.id===docsState.current);
-  return (((doc && doc.title && doc.title !== 'Untitled') ? doc.title : 'rhymepad')
-    .replace(/[^\w\- ]+/g, '').trim() || 'rhymepad') + '.txt';
-}
 const shareBtn = document.getElementById('shareBtn');
 if(navigator.share){
   shareBtn.hidden = false;
@@ -1149,15 +1143,6 @@ if(navigator.share){
     }catch(e){ /* user closed the sheet */ }
   });
 }
-document.getElementById('downloadBtn').addEventListener('click', ()=>{
-  if(!editor.value.trim()) return;
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([editor.value], {type: 'text/plain'}));
-  a.download = draftFilename();
-  a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
-  flash('downloadBtn', 'Saved \u2713');
-});
 // drop a .txt (or any text file) anywhere -> it becomes a new draft
 document.addEventListener('dragover', e=>{ e.preventDefault(); });
 document.addEventListener('drop', async e=>{
