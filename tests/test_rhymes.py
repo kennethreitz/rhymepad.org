@@ -560,3 +560,10 @@ def test_alliteration_needs_three_and_locality():
 def test_word_senses():
     from app import word_info
     assert word_info(word="light")["senses"] >= 10
+
+
+def test_unanswered_endings_reported():
+    res = analyze(Draft(text="the cat\nso blue\na hat\nthe end"))
+    opens = {res["lines"][o["l"]][o["s"]:o["e"]] for o in res["open"]}
+    assert "blue" in opens and "end" in opens
+    assert "hat" not in opens and "cat" not in opens

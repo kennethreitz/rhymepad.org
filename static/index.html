@@ -510,11 +510,13 @@ function render(){
   const lines = editor.value.split('\n');
   const tokByLine = {};
   const allitByLine = {};
+  const openByLine = {};
   const groupInfo = {};
   if(analysis){
     analysis.groups.forEach(g=>{ groupInfo[g.id] = g; });
     analysis.tokens.forEach(t=>{ (tokByLine[t.l] ||= []).push(t); });
     if(analysis.allit) analysis.allit.forEach(t=>{ (allitByLine[t.l] ||= []).push(t); });
+    if(analysis.open) analysis.open.forEach(t=>{ (openByLine[t.l] ||= []).push(t); });
   }
   const colorOf = t => `var(--r${groupInfo[t.g].color % COLORS})`;
   let html = '';
@@ -537,13 +539,15 @@ function render(){
     const words = toks.filter(t=>!t.ph);
     const phrases = toks.filter(t=>t.ph);
     const als = (allitToggle.checked && fresh) ? (allitByLine[i] || []) : [];
+    const opens = (rhymeToggle.checked && fresh) ? (openByLine[i] || []) : [];
     let h = '';
-    if(!toks.length && !als.length){
+    if(!toks.length && !als.length && !opens.length){
       h = esc(line);
     }else{
       const cuts = new Set([0, line.length]);
       toks.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
       als.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
+      opens.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
       const pts = [...cuts].sort((a,b)=>a-b);
       for(let k = 0; k < pts.length - 1; k++){
         const a = pts[k], b = pts[k+1];
@@ -552,13 +556,17 @@ function render(){
         const w = words.find(t=>t.s <= a && b <= t.e);
         const p = phrases.find(t=>t.s <= a && b <= t.e);
         const al = als.find(t=>t.s <= a && b <= t.e);
-        if(!w && !p && !al){ h += text; continue; }
-        // fills = tail sound (rhyme); underline = head sound (alliteration)
+        const op = opens.find(t=>t.s <= a && b <= t.e);
+        if(!w && !p && !al && !op){ h += text; continue; }
+        // fills = tail sound (rhyme); underline = head sound (alliteration);
+        // gray = an ending still waiting for its answer
         let style = '';
         if(w || p){
           const alpha = w ? (w.end ? 34 : 14) : (p.end ? 24 : 10);
           const color = w ? colorOf(w) : colorOf(p);
           style += `background:color-mix(in srgb, ${color} ${alpha}%, transparent);`;
+        }else if(op){
+          style += `background:color-mix(in srgb, var(--ink-dim) 13%, transparent);`;
         }
         if(al) style += `box-shadow:inset 0 -2px 0 0 color-mix(in srgb, var(--r${al.g % COLORS}) 75%, transparent);`;
         h += `<span class="hseg" style="${style}">${text}</span>`;
@@ -573,10 +581,27 @@ function render(){
   buildReadout();
 }
 
+function cadenceColors(){
+  // exact stress-contour matches (5+ syllables) form a flow family
+  const map = {};
+  if(!analysis || !analysis.meter) return map;
+  const byPat = {};
+  analysis.meter.forEach(m=>{
+    if(m.stress && m.stress.length >= 5) (byPat[m.stress] ||= []).push(m.l);
+  });
+  let fid = 0;
+  Object.keys(byPat).sort().forEach(pat=>{
+    const lns = byPat[pat];
+    if(lns.length >= 2){ lns.forEach(l=>{ map[l] = fid % COLORS; }); fid++; }
+  });
+  return map;
+}
+
 function renderStress(lines){
   if(!stressToggle.checked){ stresslayer.innerHTML = ''; return; }
   const byLine = {};
   if(analysis && analysis.stress) analysis.stress.forEach(s=>{ (byLine[s.l] ||= []).push(s); });
+  const cmap = cadenceColors();
   let html = '';
   lines.forEach((line, i)=>{
     const fresh = analysis && analysis.lines[i] === line;
@@ -586,7 +611,8 @@ function renderStress(lines){
       if(s.s < pos) return;
       h2 += esc(line.slice(pos, s.s));
       const dots = [...s.st].map(c=> c === '0' ? '○' : '●').join('');
-      h2 += `<span class="sw">${esc(line.slice(s.s, s.e))}<span class="sd">${dots}</span></span>`;
+      const col = cmap[i] != null ? ` style="color:var(--r${cmap[i]})"` : '';
+      h2 += `<span class="sw">${esc(line.slice(s.s, s.e))}<span class="sd"${col}>${dots}</span></span>`;
       pos = s.e;
     });
     h2 += esc(line.slice(pos));

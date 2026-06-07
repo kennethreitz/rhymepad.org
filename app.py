@@ -1035,9 +1035,20 @@ def analyze(draft: Draft):
             cluster.append(t)
         flush(cluster)
 
+    # unanswered endings: line-ends still waiting for a rhyme partner —
+    # the open loops that tell a writer where to strike next
+    open_out = []
+    last_tok = {}
+    for t in tokens:
+        if t["is_end"]:
+            last_tok[t["line"]] = t
+    for i, t in last_tok.items():
+        if i not in end_gid:
+            open_out.append({"l": i, "s": t["start"], "e": t["end"]})
+
     return {"lines": lines, "tokens": toks_out, "groups": groups_out,
             "stanzas": stanzas, "meter": meter, "stress": stress_out,
-            "allit": allit_out}
+            "allit": allit_out, "open": open_out}
 
 
 # --------------------------------------------------------------------------
