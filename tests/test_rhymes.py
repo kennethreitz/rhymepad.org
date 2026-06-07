@@ -308,3 +308,11 @@ def test_lookup_synonyms_wordnet():
 
 def test_lookup_synonyms_unknown_word():
     assert lookup("xqzzqx", mode="syn")["known"] is False
+
+
+def test_ine_ending_gets_een_candidate():
+    # g2p reads OOV "-ine" like valentine (AY N); Em says ketamine with
+    # an -een. Both candidates compete; the perfect pass picks the match.
+    text = ("Even ketamine or methamphetamine with the minithin\n"
+            "It better be at least seventy or three-hundred milligram")
+    group_with(text, "ketamine", "methamphetamine")

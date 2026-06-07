@@ -270,8 +270,9 @@ Double-click any word to look it up on the right."></textarea>
       </div>
       <div class="seg" id="modeSeg">
         <button class="active" data-mode="rhyme">Rhymes</button>
-        <button data-mode="near">Near rhymes</button>
+        <button data-mode="near">Near</button>
         <button data-mode="syn">Synonyms</button>
+        <button data-mode="dict">Dictionary</button>
       </div>
       <div id="defBox"></div>
       <div id="lookupResults">
@@ -564,6 +565,11 @@ async function doLookup(){
   const word = document.getElementById('lookupInput').value.trim();
   if(!word) return;
   defBox.innerHTML = '';
+  if(mode === 'dict'){
+    resultsBox.innerHTML = '';
+    showDefinition(word);
+    return;
+  }
   resultsBox.innerHTML = '<p class="muted">Searching…</p>';
   try{
     const r = await fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=${mode}`);

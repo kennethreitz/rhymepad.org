@@ -105,6 +105,12 @@ def phones_candidates(word: str) -> tuple[str, ...]:
                 g = g2p_phones(w)
                 if g:
                     cands.append(g)
+                if w.endswith("ine"):
+                    # -ine is ambiguous (valentine vs ketamine); keep the
+                    # "-een" reading as a candidate too
+                    g = g2p_phones(w[:-3] + "een")
+                    if g:
+                        cands.append(g)
             except Exception:
                 pass  # g2p model unavailable
         if len(w) >= 6:
@@ -255,6 +261,31 @@ def vc_key(word: str) -> str | None:
     if len(tail) > 1:
         key += " " + tail[1]
     return "c:" + key
+
+
+def multi_keys(word: str) -> tuple[str, ...]:
+    """Multisyllabic keys across all candidate pronunciations, anchored at
+    the last stressed vowel AND the first primary stress — KET-a-mine can
+    rhyme from its first syllable (meth-am-PHET-a-mine) even though its
+    dictionary stress sits at the end."""
+    out = []
+    for ph in phones_candidates(word):
+        pl = ph.split()
+        anchors = set()
+        for i in range(len(pl) - 1, -1, -1):
+            if pl[i][-1] in "12":
+                anchors.add(i)
+                break
+        for i, p in enumerate(pl):
+            if p[-1] == "1":
+                anchors.add(i)
+                break
+        for a in anchors or {0}:
+            vs = [DIGITS.sub("", p) for p in pl[a:] if p[-1].isdigit()]
+            k = _multi_key(vs)
+            if k:
+                out.append(k)
+    return tuple(dict.fromkeys(out))
 
 
 def slant_key(word: str) -> str | None:
@@ -478,10 +509,17 @@ def analyze(draft: Draft):
         w = t["word"].lower()
         if not t["is_end"] and (w in STOPWORDS or len(w) < 2):
             continue
-        ph = phones_for(t["word"])
-        key = _multi_key(_tail_vowels(ph)) if ph else None
-        if key:
-            attach_or_collect(t, key, by_multi, group_by_multi)
+        keys = multi_keys(t["word"])
+        for key in keys:  # join an existing family if any anchor fits
+            gi = group_by_multi.get((t["sid"], key))
+            if gi is not None:
+                raw_groups[gi]["toks"].append(t)
+                t["slant"] = True
+                grouped.add(id(t))
+                break
+        else:
+            for key in keys:
+                by_multi[(t["sid"], key)].append(t)
 
     # a phrase only competes when no word inside it already rhymes
     grouped_spans = defaultdict(list)
@@ -498,9 +536,12 @@ def analyze(draft: Draft):
         if key:
             attach_or_collect(p, key, by_multi, group_by_multi)
 
-    # distinctness by anchor word, so the phrase "fire burns" can't pose
-    # as a different word than the "fire" it starts with
-    for (sid, key), toks in by_multi.items():
+    # biggest buckets claim first (a token may sit in several via its
+    # anchors); distinctness by anchor word, so the phrase "fire burns"
+    # can't pose as a different word than the "fire" it starts with
+    for (sid, key), toks in sorted(by_multi.items(),
+                                   key=lambda kv: (-len(kv[1]), kv[0][1])):
+        toks = [t for t in toks if id(t) not in grouped]
         if len(toks) >= 2 and len({t["word"].split()[0] for t in toks}) >= 2:
             raw_groups.append({"toks": toks, "slant": True, "key": key})
             grouped.update(id(t) for t in toks)
