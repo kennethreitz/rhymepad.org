@@ -14,7 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import pronouncing
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from wordfreq import zipf_frequency
@@ -192,7 +192,7 @@ def founding_projections(key: str) -> dict[str, str]:
         if vowels:
             out["slant"] = "v:" + " ".join(vowels)
             if len(ph) > 1 and ph[1] not in ARPA_VOWELS:
-                out["vc"] = "c:" + ph[0] + " " + ph[1]
+                out["vc"] = "c:" + ph[0] + " " + _coda_class(ph[1])
             else:
                 out["vc"] = "c:" + ph[0]
             mk = _multi_key(vowels)
@@ -262,6 +262,14 @@ def rime_keys(word: str) -> tuple[str, ...]:
     return ("g:" + tail,) if tail else ()
 
 
+NASALS = {"M", "N", "NG"}
+
+
+def _coda_class(c: str) -> str:
+    """damn/hand/plans and time/line ride one nasal class in delivery."""
+    return "N" if c in NASALS else c
+
+
 def vc_key(word: str) -> str | None:
     """Last stressed vowel + first coda consonant — a consonance-aware
     slant key, so bliss / whisps / exist all share IH S."""
@@ -279,7 +287,7 @@ def vc_key(word: str) -> str | None:
         return None
     key = DIGITS.sub("", tail[0])
     if len(tail) > 1:
-        key += " " + tail[1]
+        key += " " + _coda_class(tail[1])
     return "c:" + key
 
 
@@ -294,7 +302,7 @@ def _m2_key(seq: list[str]) -> str | None:
     vi = ph.index(vowels[0])
     if vi + 1 >= len(ph) or ph[vi + 1] in ARPA_VOWELS:
         return None  # open syllable — no coda to lean on
-    return f"m2:{vowels[0]} {ph[vi + 1]} x"
+    return f"m2:{vowels[0]} {_coda_class(ph[vi + 1])} x"
 
 
 def multi_keys(word: str) -> tuple[str, ...]:
@@ -395,8 +403,18 @@ class Draft(BaseModel):
     text: str
 
 
+MAX_DRAFT = 100_000  # chars — far beyond any song, well short of abuse
+
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
+
+
 @app.post("/api/analyze")
 def analyze(draft: Draft):
+    if len(draft.text) > MAX_DRAFT:
+        raise HTTPException(413, "draft too large")
     lines = draft.text.split("\n")
 
     # stanza ids (blank-line separated)
@@ -556,15 +574,20 @@ def analyze(draft: Draft):
                         if (mk.startswith("m:")
                                 and sum(v != "x" for v in mk[2:].split()) >= 2):
                             out.setdefault((t["sid"], mk), gi)
-            elif kind == "multi2":
+            elif kind in ("multi2", "vc"):
                 # vowel-only founding keys can't carry a coda, but if 2+
-                # members agree on one (orange + pourage both AO-R-schwa),
-                # it's part of the group's sound and phrases may join on it
+                # members agree on one (orange + pourage both AO-R-schwa;
+                # hand + plans both AE-nasal), it's part of the group's
+                # sound and others may join on it
                 counts: Counter = Counter()
                 for t in g["toks"]:
-                    for mk in set(multi_keys(t["word"])):
-                        if mk.startswith("m2:"):
-                            counts[mk] += 1
+                    if kind == "vc":
+                        mks = [vc_key(t["word"])] if vc_key(t["word"]) else []
+                    else:
+                        mks = [m for m in set(multi_keys(t["word"]))
+                               if m.startswith("m2:")]
+                    for mk in mks:
+                        counts[mk] += 1
                 for mk, c in counts.items():
                     if c >= 2:
                         for s in {t["sid"] for t in g["toks"]}:
@@ -955,7 +978,8 @@ def _ranked(words, exclude: set[str], limit: int) -> list[dict]:
 
 @app.get("/api/lookup")
 def lookup(word: str, mode: str = "rhyme", limit: int = 60):
-    w = word.strip().lower()
+    w = word.strip().lower()[:64]
+    limit = min(limit, 200)
     if mode == "syn":
         sections = synonyms_for(w, limit)
         return {"word": w, "mode": mode, "known": bool(sections),

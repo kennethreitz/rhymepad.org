@@ -3,7 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RhymePad</title>
+<title>RhymePad — a scratchpad for poets &amp; rappers</title>
+<meta name="description" content="Write lyrics and poems with live phonetic rhyme detection — internal rhymes, multisyllabics, multi-word mosaics — plus a dictionary, beats, and meter check.">
+<meta property="og:title" content="RhymePad">
+<meta property="og:description" content="A scratchpad that color-codes your rhyme schemes as you write. Real phonetic analysis: internal rhymes, slant rhymes, multi-word mosaics. Yes, it knows orange rhymes with door hinge.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rhymepad.org">
+<meta name="theme-color" content="#14110f">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍊</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,900&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -231,6 +238,21 @@
   footer { grid-column: 1 / -1; }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-thumb { background: #3a342d; border-radius: 6px; border: 2px solid var(--panel); }
+
+  /* ---- mobile: stack the panel under the editor ---- */
+  @media (max-width: 900px){
+    .wrap {
+      grid-template-columns: 1fr;
+      height: auto; min-height: 100dvh;
+      padding: 10px; gap: 10px;
+    }
+    header { flex-direction: column; align-items: flex-start; gap: 2px; padding-bottom: 8px; }
+    .brand { font-size: 24px; }
+    .editor-shell { min-height: 55dvh; }
+    aside { min-height: 45dvh; }
+    .toolbar { gap: 8px; }
+    .scheme-readout { margin-left: 0; width: 100%; }
+  }
 </style>
 </head>
 <body>
@@ -466,7 +488,7 @@ function render(){
         if(!w && !p){ h += text; continue; }
         // fills only: words paint their group color; phrase rhymes paint
         // the stretches between, so multi-word matches still read as units
-        const alpha = w ? (w.end ? 34 : 13) : (p.end ? 22 : 10);
+        const alpha = w ? (w.end ? 34 : 19) : (p.end ? 24 : 14);
         const color = w ? colorOf(w) : colorOf(p);
         h += `<span class="hseg" style="background:color-mix(in srgb, ${color} ${alpha}%, transparent);">${text}</span>`;
       }

@@ -404,3 +404,19 @@ def test_near_vowel_neutralized_before_r():
     group_with(text, "head", "bed")
     group_with(text, "loud", "crowd")
     assert scheme(text) == "aabb"
+
+
+def test_nasal_codas_merge():
+    # Em delivers damn/hand/plans as one sound; M/N/NG share a coda
+    # class — and the engine finds the even fuller mosaic
+    text = ("If you never gave a damn, raise your hand\n"
+            "'Cause I'm about to set trip, vacation plans")
+    group_with(text, "gave a damn", "vacation plans")
+    group_with(text, "hand", "plans")
+
+
+def test_analyze_rejects_oversized_drafts():
+    import pytest as _pytest
+    from fastapi import HTTPException
+    with _pytest.raises(HTTPException):
+        analyze(Draft(text="a" * 200_000))
