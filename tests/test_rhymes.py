@@ -215,3 +215,10 @@ def test_syllables_always_reported():
     m = meter_of("the city hums in amber under fading light")
     assert m["syl"] == 12
     assert m["stress"]
+
+
+def test_trailing_schwa_trimmed_militia_commissioner():
+    # commissioner has one extra reduced syllable (IH-AH-ER vs IH-AH)
+    text = ("Swagger down pat, call my shit Patricia\n"
+            "Young Money militia, and I am the commissioner")
+    group_with(text, "patricia", "militia", "commissioner")

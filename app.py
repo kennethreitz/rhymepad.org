@@ -173,11 +173,15 @@ def founding_projections(key: str) -> dict[str, str]:
 
 def _multi_key(vowels: list[str]) -> str | None:
     """Key for multisyllabic slant rhymes: a 2+ vowel run where the first
-    vowel must match exactly and later reduced vowels are merged."""
+    vowel must match exactly and later reduced vowels are merged. Trailing
+    schwas are trimmed so militia (IH-AH) still catches commissioner
+    (IH-AH-ER) — the tail falls off the beat."""
     if len(vowels) < 2:
         return None
-    return "m:" + " ".join(
-        [vowels[0]] + ["x" if v in REDUCED else v for v in vowels[1:]])
+    parts = [vowels[0]] + ["x" if v in REDUCED else v for v in vowels[1:]]
+    while len(parts) > 2 and parts[-1] == "x":
+        parts.pop()
+    return "m:" + " ".join(parts)
 
 
 def _grapheme_tail(raw: str) -> str | None:
@@ -449,8 +453,10 @@ def analyze(draft: Draft):
         if key:
             attach_or_collect(p, key, by_multi, group_by_multi)
 
+    # distinctness by anchor word, so the phrase "fire burns" can't pose
+    # as a different word than the "fire" it starts with
     for (sid, key), toks in by_multi.items():
-        if len(toks) >= 2 and len({t["word"].lower() for t in toks}) >= 2:
+        if len(toks) >= 2 and len({t["word"].split()[0] for t in toks}) >= 2:
             raw_groups.append({"toks": toks, "slant": True, "key": key})
             grouped.update(id(t) for t in toks)
 
