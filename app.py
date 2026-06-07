@@ -487,8 +487,9 @@ def analyze(draft: Draft):
     for i, line in enumerate(lines):
         if sids[i] is None:
             continue
-        # ad-libs — anything in (parens) mid-line — are delivery, not
-        # text: they don't rhyme and can't claim the line-ending slot
+        # parentheticals can rhyme internally, but the line-ending slot
+        # belongs to the last word OUTSIDE parens — "(yeah)" tails and
+        # backing vocals never set the scheme
         adlib, depth, astart = [], 0, None
         for j, ch in enumerate(line):
             if ch == "(":
@@ -501,12 +502,14 @@ def analyze(draft: Draft):
                     adlib.append((astart, j + 1))
         if depth:
             adlib.append((astart, len(line)))
-        matches = [m for m in WORD_RE.finditer(line)
+        all_matches = list(WORD_RE.finditer(line))
+        outside = [m for m in all_matches
                    if not any(s <= m.start() < e for s, e in adlib)]
-        for j, m in enumerate(matches):
+        last_out = outside[-1] if outside else None
+        for m in all_matches:
             tokens.append({
                 "line": i, "start": m.start(), "end": m.end(),
-                "word": m.group(0), "is_end": j == len(matches) - 1,
+                "word": m.group(0), "is_end": m is last_out,
                 "sid": sids[i], "gid": None, "slant": False,
             })
 

@@ -617,3 +617,16 @@ def test_repetition_alone_does_not_color():
 def test_repetition_colors_once_a_differing_word_joins():
     text = "it was Tammy\npure whammy\nstill Tammy"
     group_with(text, "tammy", "whammy")
+
+
+def test_paren_words_highlight_but_never_end():
+    # (justify greed) rhymes internally with need/breed, but the line's
+    # ending slot belongs to "tragedies", outside the parens
+    text = ("How can we still succeed taking what we don't need?\n"
+            "Telling lies, alibis, selling all the hate that we breed,\n"
+            "Super-size our tragedies (you can't define me, or justify greed),")
+    group_with(text, "need", "breed", "greed", "succeed")
+    res = analyze(Draft(text=text))
+    ends = {res["lines"][t["l"]][t["s"]:t["e"]].lower()
+            for t in res["tokens"] if t["end"] and not t["ph"]}
+    assert "greed" not in ends
