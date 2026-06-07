@@ -696,7 +696,8 @@ def analyze(draft: Draft):
 
     def attach_or_collect(t, key, bucket, gmap):
         gi = gmap.get((t["sid"], key))
-        if gi is not None:
+        if gi is not None and any(abs(m["line"] - t["line"]) <= 8
+                                  for m in raw_groups[gi]["toks"]):
             raw_groups[gi]["toks"].append(t)
             t["slant"] = True
             grouped.add(id(t))
@@ -819,16 +820,40 @@ def analyze(draft: Draft):
         attach_or_collect(p, key, by_multi, group_by_multi)
 
     for (sid, key), toks in by_par.items():
-        toks = [t for t in toks if id(t) not in grouped]
-        if len(toks) >= 2 and len({t["word"].split()[0] for t in toks}) >= 2:
-            raw_groups.append({"toks": toks, "slant": True, "key": key})
-            grouped.update(id(t) for t in toks)
+        toks = sorted((t for t in toks if id(t) not in grouped),
+                      key=lambda t: t["line"])
+        runs, cur = [], []
+        for t in toks:
+            if cur and t["line"] - cur[-1]["line"] > 6:
+                runs.append(cur)
+                cur = []
+            cur.append(t)
+        if cur:
+            runs.append(cur)
+        for run in runs:
+            if len(run) >= 2 and len({t["word"].split()[0] for t in run}) >= 2:
+                raw_groups.append({"toks": run, "slant": True, "key": key})
+                grouped.update(id(t) for t in run)
 
     # biggest buckets claim first (a token may sit in several via its
     # anchors); distinctness by anchor word, so the phrase "fire burns"
     # can't pose as a different word than the "fire" it starts with
     def _flush_multi(toks, key):
-        toks = [t for t in toks if id(t) not in grouped]
+        toks = sorted((t for t in toks if id(t) not in grouped),
+                      key=lambda t: t["line"])
+        # vowel evidence is local: split on gaps of more than 6 lines
+        runs, cur = [], []
+        for t in toks:
+            if cur and t["line"] - cur[-1]["line"] > 6:
+                runs.append(cur)
+                cur = []
+            cur.append(t)
+        if cur:
+            runs.append(cur)
+        for run in runs:
+            _flush_multi_run(run, key)
+
+    def _flush_multi_run(toks, key):
         if len(toks) < 2 or len({t["word"].split()[0] for t in toks}) < 2:
             return
         # an all-phrase bucket whose members mirror the same two word
@@ -1029,6 +1054,14 @@ def analyze(draft: Draft):
                 if (len(va) == 1 and len(vb) == 1
                         and not _sets_nest(_gtags(ai), _gtags(bi))):
                     continue
+                if va != vb:
+                    # containment (unequal lengths) is weaker evidence
+                    # than identity: the families must actually meet —
+                    # Baby (l23) never fuses with Daddy (l136)
+                    la = {t["line"] for t in raw_groups[ai]["toks"]}
+                    lb = {t["line"] for t in raw_groups[bi]["toks"]}
+                    if min(abs(x - y) for x in la for y in lb) > 8:
+                        continue
                 mparent[mfind(ai)] = mfind(bi)
 
     mclusters = defaultdict(list)

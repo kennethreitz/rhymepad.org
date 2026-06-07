@@ -686,3 +686,15 @@ def test_forever_does_not_glue_to_sequential():
     assert "forever" not in seq and "ever" not in seq
     assert "question" not in seq and "extra" not in seq
     group_with(text, "style", "mile")
+
+
+def test_vowel_families_are_local():
+    # a 100-line gap can't chain a vowel family — Baby/Daddy/loan/being
+    # were one teal blob across all of "All Me"
+    text = "Baby girl I see you\n" + ("filler line here\n" * 100) + "my old daddy\n"
+    from collections import defaultdict
+    res = analyze(Draft(text=text))
+    bg = defaultdict(set)
+    for tok in res["tokens"]:
+        bg[tok["g"]].add(res["lines"][tok["l"]][tok["s"]:tok["e"]].lower())
+    assert not any({"baby", "daddy"} <= s for s in bg.values())
