@@ -466,7 +466,7 @@ function render(){
         if(!w && !p){ h += text; continue; }
         // fills only: words paint their group color; phrase rhymes paint
         // the stretches between, so multi-word matches still read as units
-        const alpha = w ? (w.end ? 24 : 15) : (p.end ? 18 : 12);
+        const alpha = w ? (w.end ? 34 : 13) : (p.end ? 22 : 10);
         const color = w ? colorOf(w) : colorOf(p);
         h += `<span class="hseg" style="background:color-mix(in srgb, ${color} ${alpha}%, transparent);">${text}</span>`;
       }
