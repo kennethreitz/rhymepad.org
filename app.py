@@ -9,6 +9,7 @@ Run it:  uv run uvicorn app:app --reload
 
 import re
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 
@@ -18,7 +19,19 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from wordfreq import zipf_frequency
 
-app = FastAPI(title="RhymePad")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # warm the slow lazy bits at boot, not on the first keystroke
+    try:
+        g2p_phones("warmup")
+    except Exception:
+        pass  # model unavailable; spelling fallbacks still work
+    get_slant_index()
+    yield
+
+
+app = FastAPI(title="RhymePad", lifespan=lifespan)
 
 _g2p = None
 
