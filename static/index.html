@@ -298,7 +298,6 @@ Double-click any word to look it up on the right."></textarea>
       <div class="seg" id="modeSeg">
         <button class="active" data-mode="rhyme">Rhymes</button>
         <button data-mode="syn">Synonyms</button>
-        <button data-mode="mosaic" title="Two-word phrases that rhyme with it">Mosaics</button>
       </div>
       <div id="defBox"></div>
       <div id="lookupResults">
@@ -648,18 +647,18 @@ async function doLookup(){
   const word = document.getElementById('lookupInput').value.trim();
   if(!word) return;
   document.getElementById('tab-lookup').scrollTop = 0;
-  showDefinition(word);  // the definition always pins on top
+  // the card belongs to the word, not the submode: rebuild only when
+  // the word changes, and respect a dismissal until then
+  if(word.toLowerCase() !== defWord){
+    defWord = word.toLowerCase();
+    defDismissed = false;
+    showDefinition(word);
+  }
   resultsBox.innerHTML = '<p class="muted">Searching…</p>';
   try{
     const r = await fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=${mode}`);
     const data = await r.json();
-    if(mode === 'mosaic'){
-      if(!data.known){
-        resultsBox.innerHTML = `<p class="muted">No clean two-word split for “${esc(word)}” — mosaics need a sound the dictionary can rebuild from two words (try placement, creation, tonight).</p>`;
-        return;
-      }
-      renderMosaics(word, data.words);
-    }else if(mode === 'syn'){
+    if(mode === 'syn'){
       if(!data.known){
         resultsBox.innerHTML = `<p class="muted">No synonyms found for “${esc(word)}”.</p>`;
         return;
@@ -694,6 +693,7 @@ function wireChips(){
 
 /* ---------- definition card (free dictionary API) ---------- */
 const defBox = document.getElementById('defBox');
+let defWord = null, defDismissed = false;
 function defCard(word, inner){
   defBox.innerHTML = `
     <div class="defcard">
@@ -705,7 +705,7 @@ function defCard(word, inner){
       </div>
     </div>`;
   defBox.querySelector('#defInsert').addEventListener('click', ()=> insertAtCursor(word));
-  defBox.querySelector('.defx').addEventListener('click', ()=>{ defBox.innerHTML=''; });
+  defBox.querySelector('.defx').addEventListener('click', ()=>{ defBox.innerHTML=''; defDismissed = true; });
 }
 function draftMates(word){
   if(!analysis) return [];
@@ -759,15 +759,6 @@ function renderChips(label, words){
   resultsBox.innerHTML = `<div class="res-label">${label}</div>` + chipHtml(words.slice(0,50));
   wireChips();
 }
-function renderMosaics(word, items){
-  let h = `<div class="res-label">two-word rhymes for “${esc(word)}” — click to insert</div>`;
-  h += chipHtml(items.map(d=>d.word));
-  resultsBox.innerHTML = h;
-  resultsBox.querySelectorAll('.chip').forEach(c=>{
-    c.addEventListener('click', ()=> insertAtCursor(c.dataset.w));
-  });
-}
-
 function renderSections(word, sections){
   if(!sections.length){ resultsBox.innerHTML = `<p class="muted">No synonyms for “${esc(word)}”.</p>`; return; }
   let h = '';

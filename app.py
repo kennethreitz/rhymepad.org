@@ -32,7 +32,6 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     get_slant_index()
-    get_mosaic_indexes()
     yield
 
 
@@ -1094,79 +1093,6 @@ def _ranked(words, exclude: set[str], limit: int) -> list[dict]:
     return out
 
 
-_phones_index: dict[str, list[str]] | None = None
-_rime_index: dict[str, list[str]] | None = None
-
-
-SQUEEZABLE = {"AH", "IH", "EH", "UH", "ER"}  # vowels that reduce unstressed
-
-
-def _squeeze(phones: str) -> str:
-    return " ".join("x" if p in SQUEEZABLE else p for p in phones.split())
-
-
-def get_mosaic_indexes():
-    """full-phones -> words (exact and vowel-squeezed) and rime -> words,
-    normalized, built once."""
-    global _phones_index, _rime_index
-    if _phones_index is None:
-        pronouncing.init_cmu()
-        pidx: dict[str, list[str]] = defaultdict(list)
-        ridx: dict[str, list[str]] = defaultdict(list)
-        for w, phones in pronouncing.pronunciations:
-            if not w.isalpha() or zipf_frequency(w, "en") < 3.0:
-                continue
-            ph = _norm_r(phones)
-            bare = DIGITS.sub("", ph)
-            pidx[bare].append(w)
-            squeezed = _squeeze(bare)
-            if squeezed != bare:
-                pidx[squeezed].append(w)
-            ridx[DIGITS.sub("", pronouncing.rhyming_part(ph))].append(w)
-        _phones_index, _rime_index = pidx, ridx
-    return _phones_index, _rime_index
-
-
-def mosaics_for(w: str, limit: int) -> list[dict]:
-    """Two-word phrases that rhyme with w perfectly: split its rime at
-    every consonant boundary and search both halves (placement ->
-    race + meant)."""
-    phones = phones_for(w)
-    if not phones:
-        return []
-    # anchor at the FIRST vowel: tonight (AH N AY T) splits into a + night
-    pl = DIGITS.sub("", phones).split()
-    vi = next((i for i, p in enumerate(pl) if p in ARPA_VOWELS), None)
-    if vi is None:
-        return []
-    rime = pl[vi:]
-    pidx, ridx = get_mosaic_indexes()
-    pairs: dict[str, float] = {}
-    for i in range(1, len(rime)):
-        left, right = " ".join(rime[:i]), " ".join(rime[i:])
-        if not any(p in ARPA_VOWELS for p in rime[:i]):
-            continue
-        if not any(p in ARPA_VOWELS for p in rime[i:]):
-            continue
-        # exact tail match, plus squeezed: where the target carries a
-        # reducible vowel, the tail word's own vowel may squeeze to fit
-        # (placement -> place + meant, the EH collapsing to a schwa)
-        tails = {right: 2.0, _squeeze(right): 0.0}
-        for a in ridx.get(left, []):
-            for tail_key, bonus in tails.items():
-                for b in pidx.get(tail_key, []):
-                    if a == w or b == w:
-                        continue
-                    phrase = f"{a} {b}"
-                    score = (zipf_frequency(a, "en")
-                             + zipf_frequency(b, "en") + bonus
-                             - (1.5 if len(a) < 2 else 0))
-                    if score > pairs.get(phrase, 0):
-                        pairs[phrase] = score
-    ranked = sorted(pairs.items(), key=lambda kv: (-kv[1], kv[0]))
-    return [{"word": p, "syl": None} for p, _ in ranked[:limit]]
-
-
 @app.get("/api/word")
 def word_info(word: str):
     """Phonetic anatomy of a word: phones, syllables, stress, rime."""
@@ -1192,9 +1118,6 @@ def lookup(word: str, mode: str = "rhyme", limit: int = 60):
         sections = synonyms_for(w, limit)
         return {"word": w, "mode": mode, "known": bool(sections),
                 "sections": sections}
-    if mode == "mosaic":
-        words = mosaics_for(w, limit)
-        return {"word": w, "mode": mode, "known": bool(words), "words": words}
     phones = phones_for(w)
     if not phones:
         return {"word": w, "mode": mode, "known": False, "words": []}

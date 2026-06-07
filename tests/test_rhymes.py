@@ -519,16 +519,6 @@ def test_secondary_pronunciation_stays_local():
 
 # -------------------------------------------------------------- new tools
 
-def test_mosaic_generator():
-    from app import mosaics_for
-    words = {m["word"] for m in mosaics_for("placement", 20)}
-    assert "place meant" in words
-    creation = {m["word"] for m in mosaics_for("creation", 20)}
-    assert "way shun" in creation
-    tonight = {m["word"] for m in mosaics_for("tonight", 20)}
-    assert "a night" in tonight
-
-
 def test_word_info():
     from app import word_info
     info = word_info(word="tonight")
