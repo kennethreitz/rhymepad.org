@@ -948,6 +948,9 @@ def analyze(draft: Draft):
             i = parent[i]
         return i
 
+    def _endy(gi):
+        return sum(t["is_end"] for t in raw_groups[gi]["toks"]) >= 2
+
     for ai in range(len(sv)):
         for bi in range(ai + 1, len(sv)):
             gi, (va, ca) = sv[ai]
@@ -955,7 +958,11 @@ def analyze(draft: Draft):
             if va != vb or ca == cb:
                 continue
             s, l = (ca, cb) if len(ca) < len(cb) else (cb, ca)
-            if l[:len(s)] == s or l[len(l) - len(s):] == s:
+            nested = l[:len(s)] == s or l[len(l) - len(s):] == s
+            # end-dominated families rhyme on their bare vowel, the way
+            # lone endings always could (blood/mud + thugs/drugs — the
+            # Kanye chorus chain); mid-line families keep their codas
+            if nested or (_endy(gi) and _endy(gj)):
                 parent[find(gi)] = find(gj)
 
     clusters = defaultdict(list)

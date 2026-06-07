@@ -110,9 +110,10 @@
   .editor-shell.rhythm #editor { line-height: 2.35; }
   #highlight {
     pointer-events: none;
-    color: transparent;
+    color: var(--ink);
     z-index: 1;
   }
+  #highlight .anno { color: #6a5f52; }
   #stresslayer {
     pointer-events: none;
     color: transparent;
@@ -126,8 +127,9 @@
   }
   #editor {
     background: transparent;
-    color: var(--ink);
+    color: transparent;
     caret-color: var(--accent);
+    &::selection { background: rgba(232,129,74,0.22); }
     resize: none;
     z-index: 2;
     outline: none;
@@ -902,7 +904,7 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
         x.globalAlpha = 1;
       });
     }
-    x.fillStyle = ink;
+    x.fillStyle = /^\s*[#([]/.test(line) ? '#6a5f52' : ink;
     x.fillText(line, PAD, y);
     if(rhythm && fresh){
       const spans = (analysis.stress.filter(s=>s.l===i)).sort((a,b)=>a.s-b.s);

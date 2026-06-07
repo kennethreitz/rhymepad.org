@@ -630,3 +630,15 @@ def test_paren_words_highlight_but_never_end():
     ends = {res["lines"][t["l"]][t["s"]:t["e"]].lower()
             for t in res["tokens"] if t["end"] and not t["ph"]}
     assert "greed" not in ends
+
+
+def test_end_dominated_vowel_families_fuse():
+    # the Kanye chorus chain: blood/mud (AH D) and thugs/drugs (AH G Z)
+    # are one AH family when both live at line ends
+    text = ("Shower us with your love\n"
+            "Wash us in the blood\n"
+            "Drop this for the thugs\n"
+            "Know I grew up in the mud\n"
+            "The top is not enough\n"
+            "No choice, sellin' drugs")
+    group_with(text, "love", "blood", "thugs", "mud", "enough", "drugs")
