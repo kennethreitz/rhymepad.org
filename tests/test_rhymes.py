@@ -599,3 +599,18 @@ def test_repeated_this_joins_the_hook_chain():
             "flickin' that wrist\n"
             "now they fuckin' with this")
     group_with(text, "shit", "assist", "wrist", "this")
+
+
+def test_repetition_alone_does_not_color():
+    text = ("Six-foot, seven-foot, eight-foot bunch\n"
+            "Six-foot, seven-foot, eight-foot bunch")
+    assert highlighted(text) == set()
+    assert scheme(text) == "aa"  # ...but refrains share a scheme letter
+    # and a repeated unrhymed ending isn't flagged "unanswered" either
+    res = analyze(Draft(text=text))
+    assert res["open"] == []
+
+
+def test_repetition_colors_once_a_differing_word_joins():
+    text = "it was Tammy\npure whammy\nstill Tammy"
+    group_with(text, "tammy", "whammy")

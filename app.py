@@ -621,9 +621,9 @@ def analyze(draft: Draft):
         # distinctness by anchor word, so "fire burns" can't pose as a
         # rhyme partner for the "fire" it starts with
         distinct = {t["word"].split()[0].lower() for t in toks}
-        end_count = sum(t["is_end"] for t in toks)
-        if len(distinct) < 2 and end_count < 2:
-            continue  # the same word repeated mid-line isn't a rhyme
+        if len(distinct) < 2:
+            continue  # repetition is refrain, not rhyme — a group only
+            # colors once a DIFFERING word rhymes into it
         if all(" " in t["word"] and t["word"].split()[0] in STOPWORDS
                for t in toks):
             continue  # stopword-anchored phrases need a real-word partner
@@ -994,6 +994,10 @@ def analyze(draft: Draft):
     for t in [*tokens, *phrases]:
         if t["is_end"] and t["gid"] is not None:
             end_gid.setdefault(t["line"], t["gid"])
+    last_tok = {}
+    for t in tokens:
+        if t["is_end"]:
+            last_tok[t["line"]] = t
     stanza_lines = defaultdict(list)
     for i, s in enumerate(sids):
         if s is not None:
@@ -1004,7 +1008,13 @@ def analyze(draft: Draft):
         letters, order = [], {}
         for i in stanza_lines[s]:
             gid = end_gid.get(i)
-            key = gid if gid is not None else f"solo:{i}"
+            if gid is not None:
+                key = gid
+            elif i in last_tok:
+                # refrains share a letter even though they don't color
+                key = "w:" + last_tok[i]["word"].lower()
+            else:
+                key = f"solo:{i}"
             if key not in order:
                 order[key] = len(order)
             letters.append(order[key])
@@ -1110,12 +1120,9 @@ def analyze(draft: Draft):
     # unanswered endings: line-ends still waiting for a rhyme partner —
     # the open loops that tell a writer where to strike next
     open_out = []
-    last_tok = {}
-    for t in tokens:
-        if t["is_end"]:
-            last_tok[t["line"]] = t
+    end_word_counts = Counter(t["word"].lower() for t in last_tok.values())
     for i, t in last_tok.items():
-        if i not in end_gid:
+        if i not in end_gid and end_word_counts[t["word"].lower()] < 2:
             open_out.append({"l": i, "s": t["start"], "e": t["end"]})
 
     return {"lines": lines, "tokens": toks_out, "groups": groups_out,
