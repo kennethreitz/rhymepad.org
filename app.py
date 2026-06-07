@@ -800,16 +800,12 @@ def analyze(draft: Draft):
     group_by_vc = gmap_for("vc")
     # a word inside an already-grouped phrase sits this pass out,
     # so "door" doesn't fight "door hinge" for the highlight
-    phrase_spans = defaultdict(list)
-    for p in phrases:
-        if id(p) in grouped:
-            phrase_spans[p["line"]].append((p["start"], p["end"]))
+    # (words inside grouped phrases used to sit this pass out; with
+    # fills-only rendering, word and phrase paint coexist — "time" can
+    # rhyme "mind" even while «all this time» rides a mosaic)
     by_vc = defaultdict(list)
     for t in tokens:
         if id(t) in grouped:
-            continue
-        if any(s < t["end"] and t["start"] < e
-               for s, e in phrase_spans[t["line"]]):
             continue
         w = t["word"].lower()
         if not t["is_end"] and (w in STOPWORDS or w in refrain or len(w) < 2):

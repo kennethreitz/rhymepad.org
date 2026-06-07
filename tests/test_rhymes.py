@@ -532,3 +532,12 @@ def test_word_info():
     info = word_info(word="tonight")
     assert info["syl"] == 2 and info["stress"] == "01"
     assert info["rime"] == "AY T"
+
+
+def test_word_inside_grouped_phrase_still_rhymes():
+    # «all this time» rides a mosaic with «lost in my», but the word
+    # time must still pair with mind at word level
+    text = ("lost in my mind for a while\n"
+            "wastin' all this time with style")
+    group_with(text, "mind", "time")
+    group_with(text, "while", "style")
