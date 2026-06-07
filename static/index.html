@@ -275,7 +275,7 @@ Double-click any word to look it up on the right."></textarea>
     </div>
     <div class="toolbar">
       <button class="btn primary" id="copyBtn">Copy to clipboard</button>
-      <button class="btn" id="sampleBtn" title="Replace this draft with the demo verses">Load sample</button>
+      <button class="btn" id="exportBtn" title="Download this draft as a color-coded PNG">Export image</button>
       <label class="mtoggle" title="Flag lines that break their stanza's syllable pattern"><input type="checkbox" id="meterToggle"> meter check</label>
       <div class="scheme-readout" id="schemeReadout"></div>
     </div>
@@ -757,6 +757,81 @@ function renderRhymes(word, data){
 }
 
 /* ============================================================
+   EXPORT IMAGE — draw the draft with its rhyme colors to a PNG,
+   entirely client-side.
+============================================================ */
+document.getElementById('exportBtn').addEventListener('click', async ()=>{
+  if(!editor.value.trim()) return;
+  await document.fonts.ready;
+  const lines = editor.value.split('\n');
+  const css = getComputedStyle(document.documentElement);
+  const palette = Array.from({length: COLORS}, (_, i)=>css.getPropertyValue(`--r${i}`).trim());
+  const ink = css.getPropertyValue('--ink').trim();
+  const bg = css.getPropertyValue('--bg').trim();
+  const S = 2, FS = 16, LH = FS * 1.9, PAD = 40;
+  const font = FS + "px 'Spline Sans Mono', monospace";
+
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.font = font;
+  const w = Math.ceil(Math.max(220, ...lines.map(l=>probe.measureText(l).width)) + PAD * 2);
+  const h = Math.ceil(lines.length * LH + PAD * 2 + 18);
+  const canvas = document.createElement('canvas');
+  canvas.width = w * S; canvas.height = h * S;
+  const x = canvas.getContext('2d');
+  x.scale(S, S);
+  x.fillStyle = bg; x.fillRect(0, 0, w, h);
+  x.font = font; x.textBaseline = 'middle';
+
+  const groupInfo = {}, tokByLine = {};
+  if(analysis){
+    analysis.groups.forEach(g=>{ groupInfo[g.id] = g; });
+    analysis.tokens.forEach(t=>{ (tokByLine[t.l] ||= []).push(t); });
+  }
+  lines.forEach((line, i)=>{
+    const y = PAD + i * LH + LH / 2;
+    const fresh = analysis && analysis.lines[i] === line;
+    const toks = (fresh ? (tokByLine[i] || []) : []).filter(t=>groupInfo[t.g]);
+    const words = toks.filter(t=>!t.ph), phrases = toks.filter(t=>t.ph);
+    const cuts = new Set([0, line.length]);
+    toks.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
+    const pts = [...cuts].sort((a,b)=>a-b);
+    for(let k = 0; k < pts.length - 1; k++){
+      const a = pts[k], b = pts[k+1];
+      const wt = words.find(t=>t.s <= a && b <= t.e);
+      const pt = phrases.find(t=>t.s <= a && b <= t.e);
+      if(!wt && !pt) continue;
+      const t = wt || pt;
+      x.globalAlpha = wt ? (wt.end ? 0.34 : 0.19) : (pt.end ? 0.24 : 0.14);
+      x.fillStyle = palette[groupInfo[t.g].color % COLORS];
+      const x0 = PAD + x.measureText(line.slice(0, a)).width;
+      const wpx = x.measureText(line.slice(a, b)).width;
+      x.beginPath();
+      x.roundRect(x0 - 2, y - FS * 0.72, wpx + 4, FS * 1.42, 4);
+      x.fill();
+      x.globalAlpha = 1;
+    }
+    x.fillStyle = ink;
+    x.fillText(line, PAD, y);
+  });
+  x.fillStyle = 'rgba(167,154,137,0.55)';
+  x.font = "11px 'Spline Sans Mono', monospace";
+  x.textAlign = 'right';
+  x.fillText('rhymepad.org', w - 16, h - 16);
+
+  canvas.toBlob(blob=>{
+    const doc = docsState.docs.find(d=>d.id===docsState.current);
+    const name = ((doc && doc.title && doc.title !== 'Untitled') ? doc.title : 'rhymepad')
+      .replace(/[^\w\- ]+/g, '').trim() || 'rhymepad';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name + '.png';
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+    flash('exportBtn', 'Exported \u2713');
+  });
+});
+
+/* ============================================================
    METER CHECK — toggleable wavy-underline warnings for lines
    that break their stanza's syllable pattern.
 ============================================================ */
@@ -776,10 +851,6 @@ function flash(id,msg){
   const b=document.getElementById(id); const o=b.textContent; b.textContent=msg;
   setTimeout(()=>b.textContent=o,1100);
 }
-document.getElementById('sampleBtn').addEventListener('click', ()=>{
-  editor.value = SAMPLE_TEXT;
-  render(); analyze(); editor.focus();
-});
 
 /* ============================================================
    BEATS — Web Audio synthesized drum patterns, adjustable tempo.
