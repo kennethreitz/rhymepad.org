@@ -997,13 +997,32 @@ function extractAZBlock(t){
   const block = lines.slice(start + 1, end).join('\n').trim();
   return block ? block + '\n' : null;
 }
+function extractGoogleBlock(t){
+  // Google's knowledge panel: a standalone "Lyrics" header, the verse,
+  // then a Source:/Songwriters: footer — search-result noise follows
+  const lines = t.split('\n');
+  let start = -1;
+  for(let i = 0; i < lines.length; i++){
+    if(lines[i].trim() === 'Lyrics'){ start = i; break; }
+  }
+  if(start < 0) return null;
+  while(start + 1 < lines.length &&
+        (lines[start + 1].trim() === 'Lyrics' || !lines[start + 1].trim())) start++;
+  let end = -1;
+  for(let i = start + 1; i < lines.length; i++){
+    if(/^(Source:\s|Songwriters?:)/i.test(lines[i].trim())){ end = i; break; }
+  }
+  if(end < 0) return null;
+  const block = lines.slice(start + 1, end).join('\n').trim();
+  return block ? block + '\n' : null;
+}
 function cleanPaste(t){
   t = t.replace(/\r\n?/g, '\n')
        .replace(/[\u2028\u2029\u0085\u000B\u000C]/g, '\n')  // Google's lyrics box
        .replace(/[\u2018\u2019\u02BC]/g, "'")
        .replace(/[\u201C\u201D]/g, '"')
        .replace(/\u00A0/g, ' ');
-  const extracted = extractLyricBlock(t) || extractAZBlock(t);
+  const extracted = extractLyricBlock(t) || extractGoogleBlock(t) || extractAZBlock(t);
   if(extracted) return extracted;
   const out = [];
   t.split('\n').forEach((l, i)=>{
