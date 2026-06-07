@@ -280,8 +280,8 @@ Double-click any word to look it up on the right."></textarea>
       <button class="btn" id="exportBtn" title="Download this draft as a color-coded PNG">Export image</button>
       <button class="btn" id="downloadBtn" title="Download this draft as a .txt file">Save .txt</button>
       <label class="mtoggle" title="Color-code rhyme families"><input type="checkbox" id="rhymeToggle" checked> rhyme</label>
-      <label class="mtoggle" title="Sheet music for your flow — syllable emphasis dots under each word"><input type="checkbox" id="stressToggle"> rhythm</label>
       <label class="mtoggle" title="Underline words that share an initial sound"><input type="checkbox" id="allitToggle"> alliteration</label>
+      <label class="mtoggle" title="Sheet music for your flow — syllable emphasis dots under each word"><input type="checkbox" id="stressToggle"> rhythm</label>
       <div class="scheme-readout" id="schemeReadout"></div>
     </div>
   </div>
@@ -605,7 +605,17 @@ function renderStress(lines){
   let html = '';
   lines.forEach((line, i)=>{
     const fresh = analysis && analysis.lines[i] === line;
-    const spans = (fresh ? (byLine[i] || []) : []).slice().sort((a,b)=>a.s-b.s);
+    let raw = [];
+    if(fresh){
+      raw = byLine[i] || [];
+    }else if(analysis && typeof analysis.lines[i] === 'string'){
+      const old = analysis.lines[i];
+      let cp = 0;
+      const n = Math.min(old.length, line.length);
+      while(cp < n && old[cp] === line[cp]) cp++;
+      raw = (byLine[i] || []).filter(s=>s.e <= cp);
+    }
+    const spans = raw.slice().sort((a,b)=>a.s-b.s);
     let pos = 0, h2 = '';
     spans.forEach(s=>{
       if(s.s < pos) return;
