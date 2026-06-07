@@ -291,10 +291,11 @@ Double-click any word to look it up on the right."></textarea>
       <div class="seg" id="modeSeg">
         <button class="active" data-mode="rhyme">Rhymes</button>
         <button data-mode="syn">Synonyms</button>
+        <button data-mode="desc" title="Adjectives that describe it">Describes</button>
       </div>
       <div id="defBox"></div>
       <div id="lookupResults">
-        <p class="muted">Type a word and hit Go, or double-click a word in your draft. A phonetic readout pins on top; the buttons switch rhymes and synonyms.</p>
+        <p class="muted">Type a word and hit Go, or double-click a word in your draft. A phonetic readout pins on top; the buttons switch rhymes, synonyms, and describing words. Tip: end a word with “?” to jump to synonyms.</p>
       </div>
     </div>
 
@@ -624,7 +625,14 @@ const lookupInput = document.getElementById('lookupInput');
 lookupInput.addEventListener('focus', ()=> lookupInput.select());
 const resultsBox = document.getElementById('lookupResults');
 async function doLookup(){
-  const word = document.getElementById('lookupInput').value.trim();
+  let word = document.getElementById('lookupInput').value.trim();
+  // RhymeZone-style: a trailing ? jumps to synonyms
+  if(word.endsWith('?')){
+    word = word.slice(0, -1).trim();
+    document.getElementById('lookupInput').value = word;
+    if(word) setMode('syn');
+    return;
+  }
   if(!word) return;
   document.getElementById('tab-lookup').scrollTop = 0;
   // the card belongs to the word, not the submode: rebuild only when
@@ -638,6 +646,10 @@ async function doLookup(){
   try{
     const r = await fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=${mode}`);
     const data = await r.json();
+    if(mode === 'desc'){
+      renderDescribes(word);
+      return;
+    }
     if(mode === 'syn'){
       if(!data.known){
         resultsBox.innerHTML = `<p class="muted">No synonyms found for “${esc(word)}”.</p>`;
@@ -715,6 +727,23 @@ async function showDefinition(word){
       (mates.length ? `<br>in your draft: ${mates.map(esc).join(', ')}` : '');
   }catch(e){}
 }
+async function renderDescribes(word){
+  resultsBox.innerHTML = '<p class="muted">Searching…</p>';
+  try{
+    const r = await fetch(`https://api.datamuse.com/words?rel_jjb=${encodeURIComponent(word)}&max=60`);
+    const data = await r.json();
+    const words = data.map(d=>d.word);
+    if(!words.length){
+      resultsBox.innerHTML = `<p class="muted">No describing words for “${esc(word)}”.</p>`;
+      return;
+    }
+    resultsBox.innerHTML = `<div class="res-label">words that describe “${esc(word)}”</div>` + chipHtml(words);
+    wireChips();
+  }catch(e){
+    resultsBox.innerHTML = '<p class="muted">Couldn\'t reach the describing-words service.</p>';
+  }
+}
+
 function renderChips(label, words){
   if(!words.length){ resultsBox.innerHTML = '<p class="muted">No results.</p>'; return; }
   resultsBox.innerHTML = `<div class="res-label">${label}</div>` + chipHtml(words.slice(0,50));
