@@ -999,8 +999,45 @@ def analyze(draft: Draft):
             stress_out.append({"l": t["line"], "s": t["start"],
                                "e": t["end"], "st": st})
 
+    # alliteration: words sharing an initial consonant SOUND, clustered
+    # locally (same or adjacent lines) — head-rhyme to the tails above
+    allit_out = []
+    onset_map = defaultdict(list)
+    for t in tokens:
+        w = t["word"].lower()
+        if w in STOPWORDS or w in refrain:
+            continue
+        ph = phones_for(t["word"])
+        if not ph:
+            continue
+        first = ph.split()[0]
+        if first[-1].isdigit():
+            continue  # vowel-initial: classic alliteration is consonantal
+        onset_map[first].append(t)
+    allit_gid = 0
+    for key in sorted(onset_map):
+        toks = sorted(onset_map[key], key=lambda t: (t["line"], t["start"]))
+        cluster: list = []
+
+        def flush(cluster):
+            nonlocal allit_gid
+            distinct = {c["word"].lower() for c in cluster}
+            if len(cluster) >= 3 and len(distinct) >= 2:
+                for c in cluster:
+                    allit_out.append({"l": c["line"], "s": c["start"],
+                                      "e": c["end"], "g": allit_gid})
+                allit_gid += 1
+
+        for t in toks:
+            if cluster and t["line"] - cluster[-1]["line"] > 1:
+                flush(cluster)
+                cluster = []
+            cluster.append(t)
+        flush(cluster)
+
     return {"lines": lines, "tokens": toks_out, "groups": groups_out,
-            "stanzas": stanzas, "meter": meter, "stress": stress_out}
+            "stanzas": stanzas, "meter": meter, "stress": stress_out,
+            "allit": allit_out}
 
 
 # --------------------------------------------------------------------------
@@ -1149,9 +1186,21 @@ def word_info(word: str):
     stress = "".join("1" if p[-1] in "12" else "0"
                      for p in pl if p[-1].isdigit())
     rime = DIGITS.sub("", pronouncing.rhyming_part(phones))
+    senses = None
+    try:
+        wn = get_wordnet()
+        base = w
+        for pos in ("n", "v", "a", "r"):
+            m = wn.morphy(w, pos)
+            if m:
+                base = m
+                break
+        senses = len(wn.synsets(base)) or None
+    except Exception:
+        pass
     return {"word": w, "known": True,
             "phones": DIGITS.sub("", phones), "syl": len(stress),
-            "stress": stress, "rime": rime,
+            "stress": stress, "rime": rime, "senses": senses,
             "homophones": get_homophones(w, phones),
             "zipf": round(zipf_frequency(w, "en"), 1)}
 

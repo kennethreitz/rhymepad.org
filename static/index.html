@@ -216,6 +216,7 @@
   .chip.common { font-weight: 600; }
   .chip.rare { color: var(--ink-dim); opacity: .75; }
   .chip.near { border-style: dashed; color: var(--ink-dim); }
+  .chip.indraft::after { content: " ✓"; color: var(--accent-2); }
   .chip.near:hover { color: var(--accent); }
   .muted { color: var(--ink-dim); font-size: 13px; line-height: 1.6; }
   .res-label { font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-dim); margin:16px 0 4px; }
@@ -278,6 +279,7 @@ Double-click any word to look it up on the right."></textarea>
       <button class="btn primary" id="copyBtn">Copy to clipboard</button>
       <button class="btn" id="exportBtn" title="Download this draft as a color-coded PNG">Export image</button>
       <label class="mtoggle" title="Sheet music for your flow — syllable emphasis dots under each word"><input type="checkbox" id="stressToggle"> rhythm</label>
+      <label class="mtoggle" title="Underline words that share an initial sound"><input type="checkbox" id="allitToggle"> alliteration</label>
       <div class="scheme-readout" id="schemeReadout"></div>
     </div>
   </div>
@@ -344,6 +346,9 @@ const stresslayer = document.getElementById('stresslayer');
 const stressToggle = document.getElementById('stressToggle');
 stressToggle.checked = false;
 stressToggle.addEventListener('change', render);
+const allitToggle = document.getElementById('allitToggle');
+allitToggle.checked = false;
+allitToggle.addEventListener('change', render);
 const schemeReadout = document.getElementById('schemeReadout');
 const COLORS = 12;
 
@@ -499,10 +504,12 @@ function render(){
   persist();
   const lines = editor.value.split('\n');
   const tokByLine = {};
+  const allitByLine = {};
   const groupInfo = {};
   if(analysis){
     analysis.groups.forEach(g=>{ groupInfo[g.id] = g; });
     analysis.tokens.forEach(t=>{ (tokByLine[t.l] ||= []).push(t); });
+    if(analysis.allit) analysis.allit.forEach(t=>{ (allitByLine[t.l] ||= []).push(t); });
   }
   const colorOf = t => `var(--r${groupInfo[t.g].color % COLORS})`;
   let html = '';
@@ -524,12 +531,14 @@ function render(){
     const toks = raw.filter(t=>groupInfo[t.g]);
     const words = toks.filter(t=>!t.ph);
     const phrases = toks.filter(t=>t.ph);
+    const als = (allitToggle.checked && fresh) ? (allitByLine[i] || []) : [];
     let h = '';
-    if(!toks.length){
+    if(!toks.length && !als.length){
       h = esc(line);
     }else{
       const cuts = new Set([0, line.length]);
       toks.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
+      als.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
       const pts = [...cuts].sort((a,b)=>a-b);
       for(let k = 0; k < pts.length - 1; k++){
         const a = pts[k], b = pts[k+1];
@@ -537,12 +546,17 @@ function render(){
         if(!text) continue;
         const w = words.find(t=>t.s <= a && b <= t.e);
         const p = phrases.find(t=>t.s <= a && b <= t.e);
-        if(!w && !p){ h += text; continue; }
-        // fills only: words paint their group color; phrase rhymes paint
-        // the stretches between, so multi-word matches still read as units
-        const alpha = w ? (w.end ? 34 : 14) : (p.end ? 24 : 10);
-        const color = w ? colorOf(w) : colorOf(p);
-        h += `<span class="hseg" style="background:color-mix(in srgb, ${color} ${alpha}%, transparent);">${text}</span>`;
+        const al = als.find(t=>t.s <= a && b <= t.e);
+        if(!w && !p && !al){ h += text; continue; }
+        // fills = tail sound (rhyme); underline = head sound (alliteration)
+        let style = '';
+        if(w || p){
+          const alpha = w ? (w.end ? 34 : 14) : (p.end ? 24 : 10);
+          const color = w ? colorOf(w) : colorOf(p);
+          style += `background:color-mix(in srgb, ${color} ${alpha}%, transparent);`;
+        }
+        if(al) style += `box-shadow:inset 0 -2px 0 0 color-mix(in srgb, var(--r${al.g % COLORS}) 75%, transparent);`;
+        h += `<span class="hseg" style="${style}">${text}</span>`;
       }
     }
     html += h + '\n';
@@ -709,11 +723,13 @@ function rarity(z){
   return z >= 4.6 ? ' common' : (z < 3.4 ? ' rare' : '');
 }
 function chipHtml(items, cls){
-  // items: strings or {word, z}
+  // items: strings or {word, z}; words already in the draft get a tick
+  const inDraft = new Set((editor.value.toLowerCase().match(/[a-z']+/g)) || []);
   return '<div class="results">' +
     items.map(d=>{
       const w = d.word || d, r = rarity(d.z);
-      return `<span class="chip${cls ? ' ' + cls : ''}${r}" data-w="${esc(w)}">${esc(w)}</span>`;
+      const used = inDraft.has(w.toLowerCase()) ? ' indraft' : '';
+      return `<span class="chip${cls ? ' ' + cls : ''}${r}${used}" data-w="${esc(w)}">${esc(w)}</span>`;
     }).join('') + '</div>';
 }
 function wireChips(){
@@ -759,6 +775,7 @@ async function showDefinition(word){
     const mates = draftMates(word);
     el.innerHTML = `/${esc(info.phones.toLowerCase())}/ · ${info.syl} syl ${dots}` +
       ` · rhymes on <i>${esc(info.rime.toLowerCase())}</i>` +
+      (info.senses >= 3 ? ` · ${info.senses} senses` : '') +
       ((info.homophones || []).length ? `<br>sounds like: ${info.homophones.map(esc).join(', ')}` : '') +
       (mates.length ? `<br>in your draft: ${mates.map(esc).join(', ')}` : '');
   }catch(e){}
@@ -874,6 +891,16 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
       x.roundRect(x0 - 2, y - FS * 0.72, wpx + 4, FS * 1.42, 4);
       x.fill();
       x.globalAlpha = 1;
+    }
+    if(allitToggle.checked && fresh){
+      (analysis.allit || []).filter(t=>t.l===i).forEach(t=>{
+        const left = PAD + x.measureText(line.slice(0, t.s)).width;
+        const wpx = x.measureText(line.slice(t.s, t.e)).width;
+        x.globalAlpha = 0.75;
+        x.fillStyle = palette[t.g % COLORS];
+        x.fillRect(left - 1, y + FS * 0.55, wpx + 2, 2);
+        x.globalAlpha = 1;
+      });
     }
     x.fillStyle = ink;
     x.fillText(line, PAD, y);

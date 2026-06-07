@@ -542,3 +542,21 @@ def test_inline_adlibs_excluded():
     assert scheme(text) == "aa"
     assert "yeah" not in highlighted(text)
     group_with(text, "bunch", "punch")
+
+
+def test_alliteration_detected():
+    res = analyze(Draft(text="Peter Piper picked a peck of pickled peppers"))
+    words = {res["lines"][t["l"]][t["s"]:t["e"]].lower() for t in res["allit"]}
+    assert {"peter", "piper", "picked", "peck", "pickled", "peppers"} <= words
+    assert len({t["g"] for t in res["allit"]}) == 1
+
+
+def test_alliteration_needs_three_and_locality():
+    # two same-onset words far apart are coincidence, not craft
+    res = analyze(Draft(text="big dog barks\nnothing here\nnothing there\nbright day"))
+    assert res["allit"] == []
+
+
+def test_word_senses():
+    from app import word_info
+    assert word_info(word="light")["senses"] >= 10
