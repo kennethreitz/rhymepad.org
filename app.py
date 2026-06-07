@@ -493,9 +493,10 @@ def analyze(draft: Draft):
         for key in rime_keys(t["word"]):
             by_rime[key].append(t)
     for p in phrases:
-        # "bought it" competes; "to me" / "but I" never found anything
-        if p["word"].split()[0] not in STOPWORDS:
-            by_rime["p:" + p["rime"]].append(p)
+        # all phrases compete on exact rime — "is it" matches "visit"
+        # phone-for-phone; the qualification below stops stopword-anchored
+        # phrases from pairing with nothing but each other
+        by_rime["p:" + p["rime"]].append(p)
 
     # biggest buckets claim their tokens first, so a word with several
     # candidate pronunciations joins its best-supported rhyme group.
@@ -512,6 +513,9 @@ def analyze(draft: Draft):
         end_count = sum(t["is_end"] for t in toks)
         if len(distinct) < 2 and end_count < 2:
             continue  # the same word repeated mid-line isn't a rhyme
+        if all(" " in t["word"] and t["word"].split()[0] in STOPWORDS
+               for t in toks):
+            continue  # stopword-anchored phrases need a real-word partner
         raw_groups.append({"toks": toks, "slant": False, "key": key})
         claimed.update(id(t) for t in toks)
 

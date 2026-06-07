@@ -383,3 +383,11 @@ def test_mosaic_finds_perfect_members_other_anchor():
     text = ("Gambino is a mastermind, fuck a bitch to pass the time\n"
             "Mass appeal, orange rind, smoke your green, I'm spendin' mine")
     group_with(text, "mastermind", "rind", "pass the time")
+
+
+def test_eliot_is_it_visit():
+    # Prufrock's signature mosaic: phone-for-phone identical rimes
+    text = ('Oh, do not ask, "What is it?"\n'
+            "Let us go and make our visit.")
+    group_with(text, "is it", "visit")
+    assert scheme(text) == "aa"
