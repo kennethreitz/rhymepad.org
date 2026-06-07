@@ -44,7 +44,8 @@ STOPWORDS = frozenset(
     do does did to too so no not nor that this these those with for from has
     had have what when then than there here you your we he she they them his
     her our us if by my em im 's t s d ll re ve
-    i'm i'll i'd i've it's that's you're we're they're he's she's""".split()
+    i'm i'll i'd i've it's that's you're we're they're he's she's
+    just like gonna wanna cause don't won't ain't yeah even me""".split()
 )
 
 
