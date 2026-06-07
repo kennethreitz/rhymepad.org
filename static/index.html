@@ -133,10 +133,8 @@
     outline: none;
   }
   #editor::placeholder { color: #5a5249; }
-  /* colored rhyme segments — words tint the background, phrases draw the
-     underline; both can overlap in different colors. Background/shadow
-     only, so the textarea text on top stays crisp and box metrics stay
-     identical (no horizontal padding!) */
+  /* colored rhyme segments — background tints only, so the textarea
+     text on top stays crisp and box metrics stay identical */
   .hseg { border-radius: 4px; }
   .toolbar {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -279,8 +277,8 @@
       <div id="stresslayer"></div>
       <div id="highlight"></div>
       <textarea id="editor" spellcheck="false" placeholder="Start writing. Leave a blank line between stanzas.
-Rhymes are detected phonetically — line endings get the underline,
-internal rhymes get the soft glow, same color = same sound.
+Rhymes are detected phonetically — same color = same sound.
+Line endings glow strongest; internal rhymes sit softer.
 Double-click any word to look it up on the right."></textarea>
     </div>
     <div class="toolbar">
@@ -343,9 +341,9 @@ Double-click any word to look it up on the right."></textarea>
    ANALYSIS — real phonetic rhyme detection lives in the Python
    backend (CMU pronouncing dictionary). We POST the draft and
    get back colored token spans:
-     end rhymes   -> underline + tint
-     internal     -> soft tint
-     slant rhymes -> faded underline (shared vowel sound)
+     end rhymes      -> strong tint
+     internal rhymes -> soft tint
+     gray tint       -> an ending no rhyme answers yet
 ============================================================ */
 const editor = document.getElementById('editor');
 const highlight = document.getElementById('highlight');
