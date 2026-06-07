@@ -187,6 +187,11 @@
   .tab:hover { color: var(--ink); }
   .panel-body { padding: 16px; overflow-y: auto; flex: 1; }
   .lookup-row { display: flex; gap: 8px; }
+  #histBar { color: var(--ink-dim); font-size: 12px; margin: 8px 2px 0; min-height: 0; }
+  #histBar .hist { cursor: pointer; }
+  #histBar .hist:hover { color: var(--accent); }
+  .more { color: var(--accent); cursor: pointer; font-size: 11px; letter-spacing: 0; text-transform: lowercase; }
+  .res-label.sub { color: #6a5f52; margin: 8px 0 2px; }
   .lookup-row input {
     flex: 1; font-family: inherit; font-size: 14px;
     background: var(--panel-2); border: 1px solid var(--line);
@@ -201,14 +206,8 @@
   }
   .seg button.active { color: var(--accent); border-color: var(--accent); }
   .results { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 6px; }
-  .defcard {
-    background: var(--panel-2); border: 1px solid var(--line);
-    border-radius: 10px; padding: 12px 14px; margin: 10px 0 4px;
-  }
-  .defhead { display: flex; align-items: baseline; gap: 8px; font-size: 14px; }
-  .defx { margin-left: auto; cursor: pointer; color: var(--ink-dim); font-size: 15px; }
-  .defx:hover { color: var(--r6); }
-  .defphon { font-size: 12px; margin: 8px 0 10px; line-height: 1.6; }
+  .defhead { margin-top: 14px; font-size: 15px; }
+  .defphon { font-size: 12px; margin: 4px 0 2px; line-height: 1.6; }
   .defphon i { color: var(--accent-2); font-style: normal; }
   .chip {
     font-size: 13px; background: var(--panel-2); border: 1px solid var(--line);
@@ -304,17 +303,12 @@ Double-click any word to look it up on the right."></textarea>
 
     <div class="panel-body" id="tab-lookup">
       <div class="lookup-row">
-        <input id="lookupInput" placeholder="a word…" autocomplete="off">
-        <button class="btn" id="lookupBtn">Go</button>
+        <input id="lookupInput" placeholder="look up a word…" autocomplete="off">
       </div>
-      <div class="seg" id="modeSeg">
-        <button class="active" data-mode="desc" title="Adjectives that describe it">Describes</button>
-        <button data-mode="rhyme">Rhymes</button>
-        <button data-mode="syn">Synonyms</button>
-      </div>
+      <div id="histBar"></div>
       <div id="defBox"></div>
       <div id="lookupResults">
-        <p class="muted">Type a word and hit Go, or double-click a word in your draft. A phonetic readout pins on top; the buttons switch rhymes, synonyms, and describing words. Tip: end a word with “?” to jump to synonyms.</p>
+        <p class="muted">Type a word — or double-click one in your draft — and its whole entry appears: how it sounds, what describes it, what rhymes, what could replace it.</p>
       </div>
     </div>
 
@@ -697,9 +691,8 @@ function lookupSelection(){
   const sel = editor.value.slice(editor.selectionStart, editor.selectionEnd)
     .trim().replace(/[^A-Za-z']/g,'');
   if(sel && !sel.includes(' ')){
-    document.getElementById('lookupInput').value = sel;
     tab('lookup');
-    setMode('desc');
+    lookupFor(sel);
   }
 }
 editor.addEventListener('dblclick', lookupSelection);
@@ -713,97 +706,79 @@ if(window.matchMedia('(pointer: coarse)').matches){
 
 /* ---------- insert at cursor ---------- */
 /* ============================================================
-   LOOKUP — rhymes & near rhymes come from our backend (CMU dict,
-   frequency-ranked). Synonyms come from the free Datamuse API.
+   WORD ENTRIES — one lookup renders the whole entry: phonetic
+   readout, describes, rhymes (+near), synonyms. Rhymes & sounds
+   come from our engine; describes comes from Datamuse.
 ============================================================ */
-const modeSeg = document.getElementById('modeSeg');
-let mode = 'desc';
-function setMode(m){
-  mode = m;
-  [...modeSeg.children].forEach(c=>c.classList.toggle('active', c.dataset.mode === m));
+const lookupInput = document.getElementById('lookupInput');
+const resultsBox = document.getElementById('lookupResults');
+const histBar = document.getElementById('histBar');
+const defBox = document.getElementById('defBox');
+let curWord = null, lookupSeq = 0, entry = null;
+const wordHistory = [];
+
+lookupInput.addEventListener('focus', ()=> lookupInput.select());
+lookupInput.addEventListener('keydown', e=>{ if(e.key === 'Enter') doLookup(); });
+lookupInput.addEventListener('input', debounce(()=>{
+  const w = lookupInput.value.trim();
+  if(w.length >= 2 && /^[A-Za-z' -]+\??$/.test(w)) doLookup();
+}, 400));
+
+function lookupFor(word){
+  lookupInput.value = word;
   doLookup();
 }
-modeSeg.addEventListener('click', e=>{
-  const b = e.target.closest('button'); if(!b) return;
-  setMode(b.dataset.mode);
-});
-document.getElementById('lookupBtn').addEventListener('click', doLookup);
-document.getElementById('lookupInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doLookup(); });
 
-const lookupInput = document.getElementById('lookupInput');
-lookupInput.addEventListener('focus', ()=> lookupInput.select());
-const resultsBox = document.getElementById('lookupResults');
+function renderHistory(){
+  const past = wordHistory.filter(w=>w !== curWord).slice(-5).reverse();
+  histBar.innerHTML = past.length
+    ? '↩ ' + past.map(w=>`<span class="hist" data-w="${esc(w)}">${esc(w)}</span>`).join(' · ')
+    : '';
+  histBar.querySelectorAll('.hist').forEach(el=>
+    el.addEventListener('click', ()=> lookupFor(el.dataset.w)));
+}
+
 async function doLookup(){
-  let word = document.getElementById('lookupInput').value.trim();
-  // RhymeZone-style: a trailing ? jumps to synonyms
-  if(word.endsWith('?')){
-    word = word.slice(0, -1).trim();
-    document.getElementById('lookupInput').value = word;
-    if(word) setMode('syn');
-    return;
-  }
-  if(!word) return;
+  const word = lookupInput.value.trim().replace(/\?$/, '').toLowerCase();
+  if(!word || word === curWord) return;
   document.getElementById('tab-lookup').scrollTop = 0;
-  // the card belongs to the word, not the submode: rebuild only when
-  // the word changes, and respect a dismissal until then
-  if(word.toLowerCase() !== defWord){
-    defWord = word.toLowerCase();
-    defDismissed = false;
-    showDefinition(word);
+  if(curWord){
+    const i = wordHistory.indexOf(curWord);
+    if(i >= 0) wordHistory.splice(i, 1);
+    wordHistory.push(curWord);
+    if(wordHistory.length > 8) wordHistory.shift();
   }
-  resultsBox.innerHTML = '<p class="muted">Searching…</p>';
-  try{
-    const r = await fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=${mode}`);
-    const data = await r.json();
-    if(mode === 'desc'){
-      renderDescribes(word);
-      return;
-    }
-    if(mode === 'syn'){
-      if(!data.known){
-        resultsBox.innerHTML = `<p class="muted">No synonyms found for “${esc(word)}”.</p>`;
-        return;
-      }
-      renderSections(word, data.sections);
+  curWord = word;
+  renderHistory();
+  const seq = ++lookupSeq;
+  defBox.innerHTML = `<div class="defhead"><b>${esc(word)}</b></div>` +
+    `<div class="muted defphon" id="defPhon">…</div>`;
+  resultsBox.innerHTML = '<p class="muted">gathering…</p>';
+  const [info, rhyme, syn, desc] = await Promise.all([
+    fetch(`/api/word?word=${encodeURIComponent(word)}`).then(r=>r.json()).catch(()=>null),
+    fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=rhyme`).then(r=>r.json()).catch(()=>null),
+    fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=syn`).then(r=>r.json()).catch(()=>null),
+    fetch(`https://api.datamuse.com/words?rel_jjb=${encodeURIComponent(word)}&max=40`).then(r=>r.json()).catch(()=>null),
+  ]);
+  if(seq !== lookupSeq) return;
+  const el = defBox.querySelector('#defPhon');
+  if(el){
+    if(info && info.known){
+      const dots = [...info.stress].map(s=>s==='1' ? '●' : '○').join('');
+      const mates = draftMates(word);
+      el.innerHTML = `/${esc(info.phones.toLowerCase())}/ · ${info.syl} syl ${dots}` +
+        ` · rhymes on <i>${esc(info.rime.toLowerCase())}</i>` +
+        (info.senses >= 3 ? ` · ${info.senses} senses` : '') +
+        ((info.homophones || []).length ? `<br>sounds like: ${info.homophones.map(esc).join(', ')}` : '') +
+        (mates.length ? `<br>in your draft: ${mates.map(esc).join(', ')}` : '');
     }else{
-      if(!data.known){
-        resultsBox.innerHTML = `<p class="muted">“${esc(word)}” isn't in the pronunciation dictionary.</p>`;
-        return;
-      }
-      renderRhymes(word, data);
+      el.textContent = 'not in the pronunciation dictionary';
     }
-  }catch(err){
-    resultsBox.innerHTML = `<p class="muted">Lookup failed — is the backend running? (${esc(String(err))})</p>`;
   }
+  entry = {word, rhyme, syn, desc, expanded: {}};
+  paintSections();
 }
 
-function rarity(z){
-  if(z == null) return '';
-  return z >= 4.6 ? ' common' : (z < 3.4 ? ' rare' : '');
-}
-function chipHtml(items, cls){
-  // items: strings or {word, z}; words already in the draft get a tick
-  const inDraft = new Set((editor.value.toLowerCase().match(/[a-z']+/g)) || []);
-  return '<div class="results">' +
-    items.map(d=>{
-      const w = d.word || d, r = rarity(d.z);
-      const used = inDraft.has(w.toLowerCase()) ? ' indraft' : '';
-      return `<span class="chip${cls ? ' ' + cls : ''}${r}${used}" data-w="${esc(w)}">${esc(w)}</span>`;
-    }).join('') + '</div>';
-}
-function wireChips(){
-  // clicking a result navigates to that word's dictionary entry
-  resultsBox.querySelectorAll('.chip').forEach(c=>{
-    c.addEventListener('click', ()=>{
-      document.getElementById('lookupInput').value = c.dataset.w;
-      doLookup();
-    });
-  });
-}
-
-/* ---------- word card: the engine's own read on a word ---------- */
-const defBox = document.getElementById('defBox');
-let defWord = null, defDismissed = false;
 function draftMates(word){
   if(!analysis) return [];
   const lw = word.toLowerCase();
@@ -820,80 +795,62 @@ function draftMates(word){
   return [...mates].slice(0, 8);
 }
 
-async function showDefinition(word){
-  defBox.innerHTML = `<div class="defcard"><div class="defhead"><b>${esc(word)}</b>` +
-    `<span class="defx" title="Dismiss">×</span></div>` +
-    `<div class="muted defphon" id="defPhon"></div></div>`;
-  defBox.querySelector('.defx').addEventListener('click', ()=>{ defBox.innerHTML=''; defDismissed = true; });
-  try{
-    const info = await (await fetch(`/api/word?word=${encodeURIComponent(word)}`)).json();
-    const el = defBox.querySelector('#defPhon');
-    if(!el) return;
-    if(!info.known){ el.textContent = "not in the pronunciation dictionary"; return; }
-    const dots = [...info.stress].map(s=>s==='1' ? '●' : '○').join('');
-    const mates = draftMates(word);
-    el.innerHTML = `/${esc(info.phones.toLowerCase())}/ · ${info.syl} syl ${dots}` +
-      ` · rhymes on <i>${esc(info.rime.toLowerCase())}</i>` +
-      (info.senses >= 3 ? ` · ${info.senses} senses` : '') +
-      ((info.homophones || []).length ? `<br>sounds like: ${info.homophones.map(esc).join(', ')}` : '') +
-      (mates.length ? `<br>in your draft: ${mates.map(esc).join(', ')}` : '');
-  }catch(e){}
+function rarity(z){
+  if(z == null) return '';
+  return z >= 4.6 ? ' common' : (z < 3.4 ? ' rare' : '');
 }
-async function renderDescribes(word){
-  resultsBox.innerHTML = '<p class="muted">Searching…</p>';
-  try{
-    const r = await fetch(`https://api.datamuse.com/words?rel_jjb=${encodeURIComponent(word)}&max=60`);
-    const data = await r.json();
-    const words = data.map(d=>d.word);
-    if(!words.length){
-      resultsBox.innerHTML = `<p class="muted">No describing words for “${esc(word)}”.</p>`;
-      return;
-    }
-    resultsBox.innerHTML = `<div class="res-label">words that describe “${esc(word)}”</div>` + chipHtml(words);
-    wireChips();
-  }catch(e){
-    resultsBox.innerHTML = '<p class="muted">Couldn\'t reach the describing-words service.</p>';
-  }
+function chipHtml(items, cls){
+  // items: strings or {word, z}; words already in the draft get a tick
+  const inDraft = new Set((editor.value.toLowerCase().match(/[a-z']+/g)) || []);
+  return '<div class="results">' +
+    items.map(d=>{
+      const w = d.word || d, r = rarity(d.z);
+      const used = inDraft.has(w.toLowerCase()) ? ' indraft' : '';
+      return `<span class="chip${cls ? ' ' + cls : ''}${r}${used}" data-w="${esc(w)}">${esc(w)}</span>`;
+    }).join('') + '</div>';
 }
 
-function renderChips(label, words){
-  if(!words.length){ resultsBox.innerHTML = '<p class="muted">No results.</p>'; return; }
-  resultsBox.innerHTML = `<div class="res-label">${label}</div>` + chipHtml(words.slice(0,50));
-  wireChips();
-}
-function renderSections(word, sections){
-  if(!sections.length){ resultsBox.innerHTML = `<p class="muted">No synonyms for “${esc(word)}”.</p>`; return; }
-  let h = '';
-  sections.forEach(s=>{
-    h += `<div class="res-label">${esc(s.label)}</div>` +
-         chipHtml(s.words.map(d=>d.word), s.label === 'synonyms' ? '' : 'near');
-  });
-  resultsBox.innerHTML = h;
-  wireChips();
+function secLabel(id, label, truncated){
+  return `<div class="res-label">${label}` +
+    (truncated && !entry.expanded[id] ? ` <span class="more" data-sec="${id}">more…</span>` : '') +
+    '</div>';
 }
 
-function syllableSections(items, cls){
-  const bySyl = {};
-  items.forEach(d=>{ (bySyl[d.syl || 0] ||= []).push(d); });
-  return Object.keys(bySyl).sort((a,b)=>a-b).map(k=>
-    `<div class="res-label">${k == 0 ? '?' : k} syllable${k == 1 ? '' : 's'}</div>` + chipHtml(bySyl[k], cls)
-  ).join('');
-}
-function renderRhymes(word, data){
-  const near = data.near || [];
-  if(!data.words.length && !near.length){
-    resultsBox.innerHTML = `<p class="muted">No rhymes for “${esc(word)}”.</p>`;
-    return;
-  }
+function paintSections(){
+  const e = entry;
+  if(!e) return;
   let h = '';
-  if(data.words.length){
-    h += `<div class="res-label">Rhymes for “${esc(word)}”</div>` + syllableSections(data.words);
+  if(e.desc && e.desc.length){
+    const items = e.desc.map(d=>d.word);
+    const lim = e.expanded.desc ? items.length : 12;
+    h += secLabel('desc', 'describes', items.length > 12) + chipHtml(items.slice(0, lim));
   }
-  if(near.length){
-    h += `<div class="res-label">Near rhymes</div>` + chipHtml(near.map(d=>d.word), 'near');
+  if(e.rhyme && e.rhyme.known && (e.rhyme.words.length || (e.rhyme.near || []).length)){
+    const lim = e.expanded.rhyme ? 999 : 8;
+    const bySyl = {};
+    e.rhyme.words.forEach(d=>{ (bySyl[d.syl || 0] ||= []).push(d); });
+    const truncated = e.rhyme.words.length > 16 || (e.rhyme.near || []).length > 8;
+    const onWord = e.rhyme.rhyme_on ? ` — on “${esc(e.rhyme.rhyme_on)}”` : '';
+    h += secLabel('rhyme', 'rhymes' + onWord, truncated);
+    Object.keys(bySyl).sort((a,b)=>a-b).forEach(k=>{
+      h += `<div class="res-label sub">${k == 0 ? '?' : k} syl</div>` + chipHtml(bySyl[k].slice(0, lim));
+    });
+    const near = (e.rhyme.near || []).slice(0, e.expanded.rhyme ? 999 : 8);
+    if(near.length) h += `<div class="res-label sub">near</div>` + chipHtml(near, 'near');
   }
-  resultsBox.innerHTML = h;
-  wireChips();
+  if(e.syn && e.syn.known && e.syn.sections.length){
+    // bottom section: always fully expanded — nothing below to crowd
+    h += secLabel('syn', 'synonyms', false);
+    e.syn.sections.forEach(s=>{
+      if(s.label !== 'synonyms') h += `<div class="res-label sub">${esc(s.label)}</div>`;
+      h += chipHtml(s.words.map(d=>d.word), s.label === 'synonyms' ? '' : 'near');
+    });
+  }
+  resultsBox.innerHTML = h || `<p class="muted">nothing found for “${esc(e.word)}”.</p>`;
+  resultsBox.querySelectorAll('.chip').forEach(c=>
+    c.addEventListener('click', ()=> lookupFor(c.dataset.w)));
+  resultsBox.querySelectorAll('.more').forEach(m=>
+    m.addEventListener('click', ()=>{ entry.expanded[m.dataset.sec] = true; paintSections(); }));
 }
 
 /* ============================================================

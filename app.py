@@ -1209,9 +1209,9 @@ def synonyms_for(w: str, limit: int) -> list[dict]:
     broader terms, and related words. Input is lemmatized first so
     'keys' and 'feeling' resolve to 'key' and 'feel'."""
     wn = get_wordnet()
-    base = w
+    base = w.replace(" ", "_")
     for pos in ("n", "v", "a", "r"):
-        m = wn.morphy(w, pos)
+        m = wn.morphy(base, pos)
         if m:
             base = m
             break
@@ -1298,9 +1298,13 @@ def get_homophones(w: str, phones: str) -> list[str]:
 
 @app.get("/api/word")
 def word_info(word: str):
-    """Phonetic anatomy of a word: phones, syllables, stress, rime."""
-    w = word.strip().lower()[:64]
-    phones = phones_for(w)
+    """Phonetic anatomy of a word — or a phrase, read straight through."""
+    w = " ".join(word.strip().lower().split()[:4])[:64]
+    if " " in w:
+        parts = [phones_for(p) for p in w.split()]
+        phones = " ".join(p for p in parts if p) if all(parts) else None
+    else:
+        phones = phones_for(w)
     if not phones:
         return {"word": w, "known": False}
     pl = phones.split()
@@ -1310,9 +1314,9 @@ def word_info(word: str):
     senses = None
     try:
         wn = get_wordnet()
-        base = w
+        base = w.replace(" ", "_")
         for pos in ("n", "v", "a", "r"):
-            m = wn.morphy(w, pos)
+            m = wn.morphy(base, pos)
             if m:
                 base = m
                 break
@@ -1322,7 +1326,7 @@ def word_info(word: str):
     return {"word": w, "known": True,
             "phones": DIGITS.sub("", phones), "syl": len(stress),
             "stress": stress, "rime": rime, "senses": senses,
-            "homophones": get_homophones(w, phones),
+            "homophones": [] if " " in w else get_homophones(w, phones),
             "zipf": round(zipf_frequency(w, "en"), 1)}
 
 
@@ -1330,6 +1334,10 @@ def word_info(word: str):
 def lookup(word: str, mode: str = "rhyme", limit: int = 60):
     w = word.strip().lower()[:64]
     limit = min(limit, 200)
+    rhyme_on = None
+    if " " in w and mode != "syn":
+        rhyme_on = w.split()[-1]  # a phrase rhymes on its final word
+        w = rhyme_on
     if mode == "syn":
         sections = synonyms_for(w, limit)
         return {"word": w, "mode": mode, "known": bool(sections),
@@ -1346,7 +1354,8 @@ def lookup(word: str, mode: str = "rhyme", limit: int = 60):
     # rhyme mode carries both: perfect in "words", slant in "near"
     words = _ranked(perfect, {w}, limit)
     near = _ranked(near_cands, {w}, limit // 2)
-    return {"word": w, "mode": mode, "known": True, "words": words, "near": near}
+    return {"word": w, "mode": mode, "known": True, "words": words,
+            "near": near, "rhyme_on": rhyme_on}
 
 
 app.mount("/", StaticFiles(directory=Path(__file__).parent / "static",
