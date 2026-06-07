@@ -1060,13 +1060,22 @@ def analyze(draft: Draft):
             kept_groups.append(g)
         raw_groups = kept_groups
 
-    # stable colors: order groups by first appearance
+    # stable colors: order groups by first appearance, then assign hues
+    # adjacency-aware — a family avoids colors already worn by families
+    # on its own or neighboring lines, so look-alikes never touch
     raw_groups.sort(key=lambda g: min((t["line"], t["start"]) for t in g["toks"]))
+    line_sets = [{t["line"] for t in g["toks"]} for g in raw_groups]
+    grown = [s | {l - 1 for l in s} | {l + 1 for l in s} for s in line_sets]
     groups_out = []
+    chosen: list[int] = []
     for gid, g in enumerate(raw_groups):
         for t in g["toks"]:
             t["gid"] = gid
-        groups_out.append({"id": gid, "color": gid % COLORS, "slant": g["slant"]})
+        used = {chosen[j] for j in range(gid) if grown[j] & line_sets[gid]}
+        color = next((c for c in range(COLORS) if c not in used),
+                     gid % COLORS)
+        chosen.append(color)
+        groups_out.append({"id": gid, "color": color, "slant": g["slant"]})
 
     # stanza rhyme schemes from line-ending groups: the token covering
     # the most of the line's tail owns the slot — Em rhymes "-cock it",
