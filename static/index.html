@@ -975,11 +975,33 @@ function extractLyricBlock(t){
   while(out.length && /^\d*$/.test(out[out.length - 1].trim())) out.pop();
   return out.join('\n').trim() + '\n';
 }
+function extractAZBlock(t){
+  // AZLyrics-style page: quoted-title headers up top, a "Thanks to…"
+  // credits footer below — the lyrics are what's between
+  const lines = t.split('\n');
+  const headRe = [/^AZLyrics/i, /^"[^"]+" lyrics$/i, /^.{1,60} Lyrics$/, /^"[^"]+"$/];
+  let start = -1;
+  for(let i = 0; i < Math.min(lines.length, 10); i++){
+    const s = lines[i].trim();
+    if(s && headRe.some(r=>r.test(s))) start = i;
+  }
+  if(start < 0) return null;
+  const endRe = [/^Thanks to .+ for (adding|correcting)/i, /^Writer\(s\):/i,
+                 /^Lyrics licensed by/i, /^You May Also Like$/i, /^album:/i,
+                 /^Submit Lyrics$/i];
+  let end = -1;
+  for(let i = start + 1; i < lines.length; i++){
+    if(endRe.some(r=>r.test(lines[i].trim()))){ end = i; break; }
+  }
+  if(end < 0) return null;  // no footer evidence — not a page dump
+  const block = lines.slice(start + 1, end).join('\n').trim();
+  return block ? block + '\n' : null;
+}
 function cleanPaste(t){
   t = t.replace(/[\u2018\u2019\u02BC]/g, "'")
        .replace(/[\u201C\u201D]/g, '"')
        .replace(/\u00A0/g, ' ');
-  const extracted = extractLyricBlock(t);
+  const extracted = extractLyricBlock(t) || extractAZBlock(t);
   if(extracted) return extracted;
   const out = [];
   t.split('\n').forEach((l, i)=>{
