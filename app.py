@@ -8,7 +8,7 @@ Run it:  uv run uvicorn app:app --reload
 """
 
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -491,6 +491,19 @@ def analyze(draft: Draft):
             if k:
                 for s in {t["sid"] for t in g["toks"]}:
                     out.setdefault((s, k), gi)
+            elif kind == "multi2":
+                # vowel-only founding keys can't carry a coda, but if 2+
+                # members agree on one (orange + pourage both AO-R-schwa),
+                # it's part of the group's sound and phrases may join on it
+                counts: Counter = Counter()
+                for t in g["toks"]:
+                    for mk in set(multi_keys(t["word"])):
+                        if mk.startswith("m2:"):
+                            counts[mk] += 1
+                for mk, c in counts.items():
+                    if c >= 2:
+                        for s in {t["sid"] for t in g["toks"]}:
+                            out.setdefault((s, mk), gi)
         return out
 
     def attach_or_collect(t, key, bucket, gmap):

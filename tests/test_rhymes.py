@@ -347,3 +347,12 @@ def test_phrase_with_one_new_half_is_not_suppressed():
             "Only thing that sold out is the seats though")
     group_with(text, "beast mode", "beast though", "sleep though",
                "seats though")
+
+
+def test_phrase_joins_slant_group_via_coda_consensus():
+    # orange + pourage found their group on vowels alone (end slant);
+    # door hinge joins because 2+ members agree on the AO-R coda
+    text = ("Pick up an orange\n"
+            "It's by the door hinge\n"
+            "eating pourage")
+    group_with(text, "orange", "door hinge", "pourage")
