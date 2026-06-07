@@ -239,3 +239,28 @@ def test_meter_coaching_needs_a_pattern_to_break():
     # two lines of wildly different lengths: no dominant pattern, no flags
     res = analyze(Draft(text="short line here\na very much longer line that runs on and on"))
     assert not any(m["off"] for m in res["meter"])
+
+
+# ------------------------------------------------------------------ layers
+
+def test_layered_phrase_rides_second_group():
+    # Em's syrup knot: "up" fills with the cup chain, while "stir up"
+    # rides the syrup/burden group as a second layer
+    text = ("Maybe your cup is full of syrup and lean\n"
+            "fill the cup up to the brim\n"
+            "Maybe I need to stir up shit\n"
+            "the burden is mine")
+    syrup = group_with(text, "syrup", "burden", "stir up")
+    cups = group_with(text, "cup", "up")
+    assert "stir up" not in cups and "syrup" not in cups
+
+
+def test_weak_phrase_attaches_but_never_founds():
+    # "were up" (stopword tail) joins an existing ER group...
+    text = ("Maybe your cup is full of syrup and lean\n"
+            "fill the cup up to the brim\n"
+            "shake the world up if it were up to me\n"
+            "the burden is mine")
+    group_with(text, "syrup", "burden", "were up")
+    # ...but two weak phrases alone can't create a group
+    assert "were up" not in highlighted("it were up to him\nit were up to her")

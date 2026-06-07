@@ -348,20 +348,33 @@ def analyze(draft: Draft):
         line_toks[t["line"]].append(t)
     for toks in line_toks.values():
         for a, b in zip(toks, toks[1:]):
-            if a["word"].lower() in STOPWORDS or b["word"].lower() in STOPWORDS:
-                continue
             pa, pb = phones_for(a["word"]), phones_for(b["word"])
             if not (pa and pb):
                 continue
+            # the phrase's rime runs from the anchor's stressed vowel
+            # through the end of the tail: "stir up" = ER AH P, which is
+            # a PERFECT rhyme with syrup
+            pl = pa.split()
+            start = 0
+            for i in range(len(pl) - 1, -1, -1):
+                if pl[i][-1] in "12":
+                    start = i
+                    break
             phrases.append({
                 "line": a["line"], "start": a["start"], "end": b["end"],
                 "word": a["word"].lower() + " " + b["word"].lower(),
                 "is_end": b["is_end"], "sid": a["sid"], "gid": None,
                 "slant": False, "vowels": _tail_vowels(pa) + _all_vowels(pb),
+                "rime": DIGITS.sub("", " ".join(pl[start:] + pb.split())),
+                # a phrase touching a stopword ("were up") may still match
+                # perfectly, but never competes in the vowel-only passes
+                "weak": (a["word"].lower() in STOPWORDS
+                         or b["word"].lower() in STOPWORDS),
             })
 
     # pass 1: perfect rhymes (shared rime), anywhere in a line — this is
-    # what catches internal rhymes
+    # what catches internal rhymes. Phrases compete too, so "stir up"
+    # perfect-rhymes "syrup" even while its "up" rhymes with "cup".
     by_rime = defaultdict(list)
     for t in tokens:
         w = t["word"].lower()
@@ -369,6 +382,10 @@ def analyze(draft: Draft):
             continue
         for key in rime_keys(t["word"]):
             by_rime[key].append(t)
+    for p in phrases:
+        # "bought it" competes; "to me" / "but I" never found anything
+        if p["word"].split()[0] not in STOPWORDS:
+            by_rime["p:" + p["rime"]].append(p)
 
     # biggest buckets claim their tokens first, so a word with several
     # candidate pronunciations joins its best-supported rhyme group.
@@ -379,7 +396,9 @@ def analyze(draft: Draft):
         toks = [t for t in toks if id(t) not in claimed]
         if len(toks) < 2:
             continue
-        distinct = {t["word"].lower() for t in toks}
+        # distinctness by anchor word, so "fire burns" can't pose as a
+        # rhyme partner for the "fire" it starts with
+        distinct = {t["word"].split()[0].lower() for t in toks}
         end_count = sum(t["is_end"] for t in toks)
         if len(distinct) < 2 and end_count < 2:
             continue  # the same word repeated mid-line isn't a rhyme
@@ -447,6 +466,8 @@ def analyze(draft: Draft):
         if id(t) in grouped:
             grouped_spans[t["line"]].append((t["start"], t["end"]))
     for p in phrases:
+        if p["weak"]:
+            continue
         if any(s < p["end"] and p["start"] < e
                for s, e in grouped_spans[p["line"]]):
             continue
@@ -487,6 +508,25 @@ def analyze(draft: Draft):
     for (sid, key), toks in by_vc.items():
         if len(toks) >= 2 and len({t["word"].lower() for t in toks}) >= 2:
             raw_groups.append({"toks": toks, "slant": True, "key": key})
+            grouped.update(id(t) for t in toks)
+
+    # stopword-anchored phrases ("were up") never compete on their own,
+    # but an exact rime match against any grouped token lets them ride
+    # along — perfect phone identity carries no transitive-key risk
+    rime_map: dict[tuple, int] = {}
+    for gi, g in enumerate(raw_groups):
+        for t in g["toks"]:
+            keys = ("p:" + t["rime"],) if "rime" in t else rime_keys(t["word"])
+            for k in keys:
+                if k.startswith("p:"):
+                    rime_map.setdefault((t["sid"], k), gi)
+    for p in phrases:
+        if id(p) in grouped or p["word"].split()[0] not in STOPWORDS:
+            continue
+        gi = rime_map.get((p["sid"], "p:" + p["rime"]))
+        if gi is not None:
+            raw_groups[gi]["toks"].append(p)
+            grouped.add(id(p))
 
     # stable colors: order groups by first appearance
     raw_groups.sort(key=lambda g: min((t["line"], t["start"]) for t in g["toks"]))
@@ -536,7 +576,7 @@ def analyze(draft: Draft):
 
     toks_out = [
         {"l": t["line"], "s": t["start"], "e": t["end"], "g": t["gid"],
-         "end": t["is_end"],
+         "end": t["is_end"], "ph": "vowels" in t,
          "slant": t["slant"] or groups_out[t["gid"]]["slant"]}
         for t in [*tokens, *phrases] if t["gid"] is not None
     ]

@@ -111,19 +111,11 @@
     outline: none;
   }
   #editor::placeholder { color: #5a5249; }
-  /* colored rhyme tokens — background tint only, so the textarea text on
-     top stays crisp and box metrics stay identical (no horizontal padding!) */
-  .rh {
-    border-radius: 4px;
-    background: color-mix(in srgb, var(--c) 15%, transparent);
-  }
-  .rh.end {
-    background: color-mix(in srgb, var(--c) 24%, transparent);
-    box-shadow: inset 0 -2px 0 0 var(--c);
-  }
-  .rh.slant.end {
-    box-shadow: inset 0 -2px 0 0 color-mix(in srgb, var(--c) 45%, transparent);
-  }
+  /* colored rhyme segments — words tint the background, phrases draw the
+     underline; both can overlap in different colors. Background/shadow
+     only, so the textarea text on top stays crisp and box metrics stay
+     identical (no horizontal padding!) */
+  .seg { border-radius: 4px; }
   .offbeat {
     text-decoration: underline wavy color-mix(in srgb, var(--r6) 45%, transparent);
     text-decoration-skip-ink: none;
@@ -484,21 +476,41 @@ function render(){
     analysis.groups.forEach(g=>{ groupInfo[g.id] = g; });
     analysis.tokens.forEach(t=>{ (tokByLine[t.l] ||= []).push(t); });
   }
+  const colorOf = t => `var(--r${groupInfo[t.g].color % COLORS})`;
   let html = '';
   lines.forEach((line, i)=>{
     // only apply spans if this line still matches what the server analyzed
     const fresh = analysis && analysis.lines[i] === line;
-    const toks = fresh ? (tokByLine[i] || []) : [];
-    toks.sort((a,b)=>a.s-b.s);
-    let pos = 0, h = '';
-    toks.forEach(t=>{
-      const g = groupInfo[t.g]; if(!g || t.s < pos) return;
-      h += esc(line.slice(pos, t.s));
-      const cls = 'rh' + (t.end ? ' end' : '') + (t.slant ? ' slant' : '');
-      h += `<span class="${cls}" style="--c:var(--r${g.color % COLORS})">` + esc(line.slice(t.s, t.e)) + '</span>';
-      pos = t.e;
-    });
-    h += esc(line.slice(pos));
+    const toks = (fresh ? (tokByLine[i] || []) : []).filter(t=>groupInfo[t.g]);
+    const words = toks.filter(t=>!t.ph);
+    const phrases = toks.filter(t=>t.ph);
+    let h = '';
+    if(!toks.length){
+      h = esc(line);
+    }else{
+      const cuts = new Set([0, line.length]);
+      toks.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
+      const pts = [...cuts].sort((a,b)=>a-b);
+      for(let k = 0; k < pts.length - 1; k++){
+        const a = pts[k], b = pts[k+1];
+        const text = esc(line.slice(a, b));
+        if(!text) continue;
+        const w = words.find(t=>t.s <= a && b <= t.e);
+        const p = phrases.find(t=>t.s <= a && b <= t.e);
+        if(!w && !p){ h += text; continue; }
+        let style = '';
+        if(w) style += `background:color-mix(in srgb, ${colorOf(w)} ${w.end ? 24 : 15}%, transparent);`;
+        let ul = null;
+        if(w && w.end){
+          ul = w.slant ? `color-mix(in srgb, ${colorOf(w)} 45%, transparent)` : colorOf(w);
+        }else if(p){
+          ul = p.end && !p.slant ? colorOf(p)
+             : `color-mix(in srgb, ${colorOf(p)} 55%, transparent)`;
+        }
+        if(ul) style += `box-shadow:inset 0 -2px 0 0 ${ul};`;
+        h += `<span class="seg" style="${style}">${text}</span>`;
+      }
+    }
     const m = fresh && analysis.meter ? analysis.meter.find(x=>x.l===i) : null;
     html += (m && m.off ? `<span class="offbeat">${h}</span>` : h) + '\n';
   });
