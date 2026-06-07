@@ -200,8 +200,6 @@
   .defhead { display: flex; align-items: baseline; gap: 8px; font-size: 14px; }
   .defx { margin-left: auto; cursor: pointer; color: var(--ink-dim); font-size: 15px; }
   .defx:hover { color: var(--r6); }
-  .btn.small { padding: 5px 10px; font-size: 12px; }
-  .def-actions { display: flex; gap: 8px; }
   .defphon { font-size: 12px; margin: 8px 0 10px; line-height: 1.6; }
   .defphon i { color: var(--accent-2); font-style: normal; }
   .chip {
@@ -604,19 +602,6 @@ if(window.matchMedia('(pointer: coarse)').matches){
 }
 
 /* ---------- insert at cursor ---------- */
-function insertAtCursor(word){
-  const s = editor.selectionStart, e = editor.selectionEnd;
-  const v = editor.value;
-  const needSpace = s > 0 && !/\s/.test(v[s-1]);
-  const ins = (needSpace ? ' ' : '') + word;
-  editor.value = v.slice(0,s) + ins + v.slice(e);
-  const np = s + ins.length;
-  editor.focus();
-  editor.setSelectionRange(np, np);
-  render();
-  analyzeSoon();
-}
-
 /* ============================================================
    LOOKUP — rhymes & near rhymes come from our backend (CMU dict,
    frequency-ranked). Synonyms come from the free Datamuse API.
@@ -715,9 +700,7 @@ function draftMates(word){
 async function showDefinition(word){
   defBox.innerHTML = `<div class="defcard"><div class="defhead"><b>${esc(word)}</b>` +
     `<span class="defx" title="Dismiss">×</span></div>` +
-    `<div class="muted defphon" id="defPhon"></div>` +
-    `<div class="def-actions"><button class="btn small" id="defInsert">Insert at cursor</button></div></div>`;
-  defBox.querySelector('#defInsert').addEventListener('click', ()=> insertAtCursor(word));
+    `<div class="muted defphon" id="defPhon"></div></div>`;
   defBox.querySelector('.defx').addEventListener('click', ()=>{ defBox.innerHTML=''; defDismissed = true; });
   try{
     const info = await (await fetch(`/api/word?word=${encodeURIComponent(word)}`)).json();
