@@ -391,3 +391,16 @@ def test_eliot_is_it_visit():
             "Let us go and make our visit.")
     group_with(text, "is it", "visit")
     assert scheme(text) == "aa"
+
+
+def test_near_vowel_neutralized_before_r():
+    # CMU: fear = F IH1 R, hear = HH IY1 R — but they rhyme in every
+    # dialect of English (the NEAR vowel)
+    text = ("i fear the sounds above my head\n"
+            "as i sit here calmly in bed\n"
+            "i hear a rumble oh so loud\n"
+            "sounds like mania and a crowd")
+    group_with(text, "fear", "here", "hear")
+    group_with(text, "head", "bed")
+    group_with(text, "loud", "crowd")
+    assert scheme(text) == "aabb"

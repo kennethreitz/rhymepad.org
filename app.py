@@ -59,7 +59,7 @@ COLORS = 12  # matches --r0..--r11 in the stylesheet
 STOPWORDS = frozenset(
     """i a an the and or but as at of in on is it its was were are am be been
     do does did to too so no not nor that this these those with for from has
-    had have what when then than there here you your we he she they them his
+    had have what when then than there you your we he she they them his
     her our us if by my em im 's t s d ll re ve
     i'm i'll i'd i've it's that's you're we're they're he's she's
     just like gonna wanna cause don't won't ain't yeah even me""".split()
@@ -69,6 +69,21 @@ STOPWORDS = frozenset(
 # --------------------------------------------------------------------------
 # pronunciation
 # --------------------------------------------------------------------------
+
+def _norm_r(phones: str) -> str:
+    """Neutralize vowel contrasts that English loses before R: CMU has
+    fear = F IH1 R but hear = HH IY1 R, yet they rhyme in every dialect
+    (the NEAR vowel). Same for UH/UW (cure, tour)."""
+    pl = phones.split()
+    for i in range(len(pl) - 1):
+        if pl[i + 1][0] == "R" and pl[i][-1].isdigit():
+            base, stress = pl[i][:-1], pl[i][-1]
+            if base == "IH":
+                pl[i] = "IY" + stress
+            elif base == "UH":
+                pl[i] = "UW" + stress
+    return " ".join(pl)
+
 
 @lru_cache(maxsize=None)
 def phones_candidates(word: str) -> tuple[str, ...]:
@@ -121,7 +136,7 @@ def phones_candidates(word: str) -> tuple[str, ...]:
                 if a and b:
                     cands.append(a[0] + " " + b[0])
                     break
-    return tuple(dict.fromkeys(cands))
+    return tuple(dict.fromkeys(_norm_r(c) for c in cands))
 
 
 def phones_for(word: str) -> str | None:
