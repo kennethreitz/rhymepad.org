@@ -958,10 +958,43 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
    (don’t -> don + t), and lyrics sites ship cruft lines. Pasted
    text gets normalized and de-crufted on the way in.
 ============================================================ */
+const SECTION_RE = /^\[[^\]]{1,48}\]$/;
+function extractLyricBlock(t){
+  // a whole-page Genius dump: lyrics live between the first [Section]
+  // header and the Embed/About/Comments footer
+  const lines = t.split('\n');
+  const first = lines.findIndex(l=>SECTION_RE.test(l.trim()));
+  if(first < 0) return null;
+  let end = -1;
+  for(let i = first; i < lines.length; i++){
+    const s = lines[i].trim();
+    if(/^\d*\s*Embed$/.test(s) || /^About$/.test(s) || /^Comments$/.test(s)){ end = i; break; }
+  }
+  const head = lines.slice(0, first).join('\n');
+  const pageish = /Contributors|Translations|Lyrics/i.test(head);
+  if(end < 0 && !pageish) return null;  // just lyrics with [tags] — leave alone
+  let block = lines.slice(first, end < 0 ? lines.length : end);
+  // recommendation inserts run from "You might also like" to the next [Section]
+  const out = [];
+  let skipping = false;
+  for(const l of block){
+    const s = l.trim();
+    if(/^You might also like/i.test(s)){ skipping = true; continue; }
+    if(skipping){
+      if(SECTION_RE.test(s)) skipping = false;
+      else continue;
+    }
+    out.push(l);
+  }
+  while(out.length && /^\d*$/.test(out[out.length - 1].trim())) out.pop();
+  return out.join('\n').trim() + '\n';
+}
 function cleanPaste(t){
   t = t.replace(/[\u2018\u2019\u02BC]/g, "'")
        .replace(/[\u201C\u201D]/g, '"')
        .replace(/\u00A0/g, ' ');
+  const extracted = extractLyricBlock(t);
+  if(extracted) return extracted;
   const out = [];
   t.split('\n').forEach((l, i)=>{
     const s = l.trim();
