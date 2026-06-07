@@ -269,14 +269,13 @@ Double-click any word to look it up on the right."></textarea>
         <button class="btn" id="lookupBtn">Go</button>
       </div>
       <div class="seg" id="modeSeg">
-        <button class="active" data-mode="dict">Definition</button>
-        <button data-mode="rhyme">Rhymes</button>
+        <button class="active" data-mode="rhyme">Rhymes</button>
         <button data-mode="near">Near</button>
         <button data-mode="syn">Synonyms</button>
       </div>
       <div id="defBox"></div>
       <div id="lookupResults">
-        <p class="muted">Type a word and hit Go, or double-click a word in your draft. The buttons switch between its definition, rhymes, and synonyms.</p>
+        <p class="muted">Type a word and hit Go, or double-click a word in your draft. Its definition pins on top; the buttons switch rhymes, near rhymes, and synonyms.</p>
       </div>
     </div>
 
@@ -528,7 +527,7 @@ editor.addEventListener('dblclick', ()=>{
   if(sel){
     document.getElementById('lookupInput').value = sel;
     tab('lookup');
-    setMode('dict');
+    doLookup();
   }
 });
 
@@ -551,7 +550,7 @@ function insertAtCursor(word){
    frequency-ranked). Synonyms come from the free Datamuse API.
 ============================================================ */
 const modeSeg = document.getElementById('modeSeg');
-let mode = 'dict';
+let mode = 'rhyme';
 function setMode(m){
   mode = m;
   [...modeSeg.children].forEach(c=>c.classList.toggle('active', c.dataset.mode === m));
@@ -568,12 +567,7 @@ const resultsBox = document.getElementById('lookupResults');
 async function doLookup(){
   const word = document.getElementById('lookupInput').value.trim();
   if(!word) return;
-  defBox.innerHTML = '';
-  if(mode === 'dict'){
-    resultsBox.innerHTML = '';
-    showDefinition(word);
-    return;
-  }
+  showDefinition(word);  // the definition always pins on top
   resultsBox.innerHTML = '<p class="muted">Searching…</p>';
   try{
     const r = await fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=${mode}`);
@@ -606,7 +600,7 @@ function wireChips(){
   resultsBox.querySelectorAll('.chip').forEach(c=>{
     c.addEventListener('click', ()=>{
       document.getElementById('lookupInput').value = c.dataset.w;
-      setMode('dict');
+      doLookup();
     });
   });
 }
@@ -621,14 +615,9 @@ function defCard(word, inner){
       ${inner}
       <div class="def-actions">
         <button class="btn small" id="defInsert">Insert at cursor</button>
-        <button class="btn small" id="defRhymes">Rhymes</button>
       </div>
     </div>`;
   defBox.querySelector('#defInsert').addEventListener('click', ()=> insertAtCursor(word));
-  defBox.querySelector('#defRhymes').addEventListener('click', ()=>{
-    document.getElementById('lookupInput').value = word;
-    setMode('rhyme');
-  });
   defBox.querySelector('.defx').addEventListener('click', ()=>{ defBox.innerHTML=''; });
 }
 async function showDefinition(word){
