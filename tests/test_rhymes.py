@@ -670,3 +670,19 @@ def test_multis_generator():
 def test_multis_in_lookup_response():
     data = lookup("placement", mode="rhyme")
     assert data["multis"] and "basement" not in data["multis"]  # perfects excluded
+
+
+def test_forever_does_not_glue_to_sequential():
+    # both carry EH-x, but forever ends open (.) and sequential closes
+    # on L — and «forever (forever» phrase carpets obey refrain muting
+    text = ("Diamonds are forever (forever, forever)\n"
+            "Diamonds are forever (forever, forever, forever)\n"
+            "Forever ever? Forever ever? Ever, ever?\n"
+            "this is a question of writing style\n"
+            "going the extra mile\n"
+            "quintessential\n"
+            "sequential")
+    seq = group_with(text, "quintessential", "sequential")
+    assert "forever" not in seq and "ever" not in seq
+    assert "question" not in seq and "extra" not in seq
+    group_with(text, "style", "mile")

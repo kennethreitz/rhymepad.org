@@ -337,6 +337,19 @@ def _m2_key(seq: list[str]) -> str | None:
     return f"m2:{vowels[0]} {_coda_class(ph[vi + 1])} x"
 
 
+def _final_coda_tag(pl: list[str]) -> str:
+    """Coda-class string after the LAST vowel ('.' for open)."""
+    last = -1
+    for i, p in enumerate(pl):
+        if p[-1].isdigit():
+            last = i
+    coda = "".join(_coda_class(DIGITS.sub("", p)) for p in pl[last + 1:])
+    return coda or "."
+
+
+WEAK_MK = re.compile(r"^m:[A-Z]+ x$")
+
+
 def multi_keys(word: str) -> tuple[str, ...]:
     """Multisyllabic keys across all candidate pronunciations, anchored at
     the last stressed vowel AND the first primary stress — KET-a-mine can
@@ -514,6 +527,11 @@ def analyze(draft: Draft):
                 "sid": sids[i], "gid": None, "slant": False,
             })
 
+    # words the draft leans on as refrain/filler (4+ uses) stop lighting
+    # up mid-line — their line-end uses still count
+    counts = Counter(t["word"].lower() for t in tokens)
+    refrain = {w for w, c in counts.items() if c >= 4}
+
     # phrase tokens: adjacent word pairs, so multi-word rhymes can match
     # single words (orange / door hinge). Anchored at the first word's
     # stressed vowel; competes in the multisyllabic slant pass only.
@@ -523,6 +541,8 @@ def analyze(draft: Draft):
         line_toks[t["line"]].append(t)
     for toks in line_toks.values():
         for a, b in zip(toks, toks[1:]):
+            if a["word"].lower() in refrain:
+                continue  # «Forever ever» carpets obey refrain muting too
             pa, pb = phones_for(a["word"]), phones_for(b["word"])
             if not (pa and pb):
                 continue
@@ -544,7 +564,8 @@ def analyze(draft: Draft):
                 # a phrase touching a stopword ("were up") may still match
                 # perfectly, but never competes in the vowel-only passes
                 "weak": (a["word"].lower() in STOPWORDS
-                         or b["word"].lower() in STOPWORDS),
+                         or b["word"].lower() in STOPWORDS
+                         or b["word"].lower() in refrain),
             })
 
     # mosaic triples: three-word runs whose vowel run is the rhyme —
@@ -553,6 +574,8 @@ def analyze(draft: Draft):
     for toks in line_toks.values():
         for a, b, c in zip(toks, toks[1:], toks[2:]):
             if a["word"].lower() in STOPWORDS:
+                continue
+            if a["word"].lower() in refrain:
                 continue
             pa, pb, pc = (phones_for(a["word"]), phones_for(b["word"]),
                           phones_for(c["word"]))
@@ -580,11 +603,6 @@ def analyze(draft: Draft):
                     "", " ".join(pl[start:] + pb.split() + pc.split())),
                 "weak": False,
             })
-
-    # words the draft leans on as refrain/filler (4+ uses) stop lighting
-    # up mid-line — their line-end uses still count
-    counts = Counter(t["word"].lower() for t in tokens)
-    refrain = {w for w, c in counts.items() if c >= 4}
 
     # pass 1: perfect rhymes (shared rime), anywhere in a line — this is
     # what catches internal rhymes. Phrases compete too, so "stir up"
@@ -809,20 +827,66 @@ def analyze(draft: Draft):
     # biggest buckets claim first (a token may sit in several via its
     # anchors); distinctness by anchor word, so the phrase "fire burns"
     # can't pose as a different word than the "fire" it starts with
-    for (sid, key), toks in sorted(by_multi.items(),
-                                   key=lambda kv: (-len(kv[1]), kv[0][1])):
+    def _flush_multi(toks, key):
         toks = [t for t in toks if id(t) not in grouped]
         if len(toks) < 2 or len({t["word"].split()[0] for t in toks}) < 2:
-            continue
+            return
         # an all-phrase bucket whose members mirror the same two word
         # groups is pure redundancy (oh my / go rhyme over oh+go, my+rhyme)
         halves = {t.get("halves") for t in toks}
         if (len(halves) == 1
                 and None not in halves
                 and None not in next(iter(halves))):
-            continue
+            return
         raw_groups.append({"toks": toks, "slant": True, "key": key})
         grouped.update(id(t) for t in toks)
+
+    def _word_tag(t):
+        ph = phones_for(t["word"])
+        return _final_coda_tag(ph.split()) if ph else "."
+
+    def _tags_ok(ta, tb):
+        if ta == tb:
+            return True
+        if ta == "." or tb == ".":
+            return False
+        return (ta.startswith(tb) or tb.startswith(ta)
+                or ta.endswith(tb) or tb.endswith(ta))
+
+    for (sid, key), toks in sorted(by_multi.items(),
+                                   key=lambda kv: (-len(kv[1]), kv[0][1])):
+        if not WEAK_MK.match(key):
+            _flush_multi(toks, key)
+            continue
+        # a bare V-x signature is too weak on its own: subdivide the
+        # bucket by nesting final-coda classes, so placement (NT) keeps
+        # creation (N) but forever (.) lets go of sequential (L)
+        words = [t for t in toks if " " not in t["word"]]
+        phs = [t for t in toks if " " in t["word"]]
+        tags = [_word_tag(t) for t in words]
+        par = list(range(len(words)))
+
+        def _f(i):
+            while par[i] != i:
+                par[i] = par[par[i]]
+                i = par[i]
+            return i
+
+        for i in range(len(words)):
+            for j in range(i + 1, len(words)):
+                if _tags_ok(tags[i], tags[j]):
+                    par[_f(i)] = _f(j)
+        clus = defaultdict(list)
+        for i, t in enumerate(words):
+            clus[_f(i)].append(t)
+        subsets = sorted(clus.values(), key=len, reverse=True)
+        if phs:
+            if subsets:
+                subsets[0].extend(phs)  # phrases ride the main cluster
+            else:
+                subsets = [phs]
+        for sub in subsets:
+            _flush_multi(sub, key)
 
     # pass 4: consonance-aware slant anywhere in a line — last stressed
     # vowel + first coda consonant, so bliss / whisps / exist (IH S) group
@@ -915,10 +979,33 @@ def analyze(draft: Draft):
         return len(short) <= len(long) and long[len(long) - len(short):] == short
 
     def _sig(key):
-        vs = key[2:].split()
+        vs = key[2:].split("|", 1)[0].split()
         while vs and vs[-1] == "x":
             vs.pop()  # trailing schwas fall off the beat on both sides
         return vs
+
+    def _gtags(gi):
+        out = set()
+        for t in raw_groups[gi]["toks"]:
+            if " " in t["word"]:
+                continue
+            ph = phones_for(t["word"])
+            if ph:
+                out.add(_final_coda_tag(ph.split()))
+        return out
+
+    def _tags_ok2(ta, tb):
+        if ta == tb:
+            return True
+        if ta == "." or tb == ".":
+            return False
+        return (ta.startswith(tb) or tb.startswith(ta)
+                or ta.endswith(tb) or tb.endswith(ta))
+
+    def _sets_nest(A, B):
+        if not A or not B:
+            return True  # phrase-only family: no coda evidence to refuse
+        return any(_tags_ok2(x, y) for x in A for y in B)
 
     for ai in range(len(raw_groups)):
         if not mkeys[ai]:
@@ -935,8 +1022,13 @@ def analyze(draft: Draft):
             # equal keys fuse; so do END-ALIGNED containments — a family
             # rhyming on AA-x is the tail of one rhyming on AE-AA-x
             # (back pocket / rap profit / office), the longer just
-            # carries lead syllables
+            # carries lead syllables. But when BOTH signatures are a
+            # single vowel, the final codas must nest too — forever (.)
+            # and sequential (L) share EH-x and still aren't one family
             if va == vb or _tail_of(va, vb) or _tail_of(vb, va):
+                if (len(va) == 1 and len(vb) == 1
+                        and not _sets_nest(_gtags(ai), _gtags(bi))):
+                    continue
                 mparent[mfind(ai)] = mfind(bi)
 
     mclusters = defaultdict(list)
