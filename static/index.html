@@ -249,6 +249,7 @@
     header { flex-direction: column; align-items: flex-start; gap: 2px; padding-bottom: 8px; }
     .brand { font-size: 24px; }
     .editor-shell { min-height: 55dvh; }
+    #highlight, #editor { font-size: 16px; }  /* sub-16px makes iOS zoom-jump */
     aside { min-height: 45dvh; }
     .toolbar { gap: 8px; }
     .scheme-readout { margin-left: 0; width: 100%; }
@@ -340,6 +341,19 @@ function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout
 
 let analysis = null;      // last server response
 let backendOk = true;
+let analyzeSeq = 0;       // guards against out-of-order responses
+
+const SAMPLE_TEXT =
+`I keep the cadence tucked beneath my tongue tonight
+the city hums in amber under fading light
+I trace a melody that never quite takes flight
+and let the silence answer everything I write
+
+I put my orange
+four-inch
+door hinge
+in storage,
+and ate porridge with George`;
 
 /* ---------- drafts — multiple docs in localStorage, tabbed ---------- */
 const DOCS_KEY = 'rhymepad.docs';
@@ -351,9 +365,10 @@ function loadDocs(){
     const s = JSON.parse(localStorage.getItem(DOCS_KEY));
     if(s && s.docs && s.docs.length && s.docs.some(d=>d.id===s.current)) return s;
   }catch(e){}
-  // migrate the single-draft era (or first visit)
+  // migrate the single-draft era; a brand-new visitor starts with the
+  // sample so the colors are visible before they type a word
   const id = newId();
-  const text = localStorage.getItem('rhymepad.draft') || '';
+  const text = localStorage.getItem('rhymepad.draft') ?? SAMPLE_TEXT;
   localStorage.setItem(docKey(id), text);
   const s = {docs: [{id, title: titleOf(text)}], current: id};
   localStorage.setItem(DOCS_KEY, JSON.stringify(s));
@@ -410,12 +425,21 @@ function renderTabs(){
   draftsBar.appendChild(plus);
 }
 function openDoc(id){
+  // remember where we were in the draft we're leaving
+  const cur = docsState.docs.find(d=>d.id===docsState.current);
+  if(cur){ cur.sel = editor.selectionStart; cur.scroll = editor.scrollTop; }
   docsState.current = id;
   saveDocs();
   editor.value = localStorage.getItem(docKey(id)) || '';
   analysis = null;
   renderTabs();
   render(); analyze(); editor.focus();
+  const doc = docsState.docs.find(d=>d.id===id);
+  if(doc && doc.sel != null){
+    editor.setSelectionRange(doc.sel, doc.sel);
+    editor.scrollTop = doc.scroll || 0;
+    highlight.scrollTop = editor.scrollTop;
+  }
 }
 function newDoc(){
   const id = newId();
@@ -441,19 +465,22 @@ renderTabs();
 
 async function analyze(){
   const text = editor.value;
+  const seq = ++analyzeSeq;
   try{
     const r = await fetch('/api/analyze', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({text})
     });
+    if(seq !== analyzeSeq) return;  // a newer request superseded us
     analysis = await r.json();
     backendOk = true;
   }catch(e){
+    if(seq !== analyzeSeq) return;
     backendOk = false;
   }
   render();
 }
-const analyzeSoon = debounce(analyze, 250);
+const analyzeSoon = debounce(analyze, 180);
 
 function render(){
   persist();
@@ -467,9 +494,21 @@ function render(){
   const colorOf = t => `var(--r${groupInfo[t.g].color % COLORS})`;
   let html = '';
   lines.forEach((line, i)=>{
-    // only apply spans if this line still matches what the server analyzed
+    // apply spans where the line still matches what the server analyzed;
+    // on an edited line, keep highlights over the unchanged prefix so
+    // typing at the end of a line doesn't blank it
     const fresh = analysis && analysis.lines[i] === line;
-    const toks = (fresh ? (tokByLine[i] || []) : []).filter(t=>groupInfo[t.g]);
+    let raw = [];
+    if(fresh){
+      raw = tokByLine[i] || [];
+    }else if(analysis && typeof analysis.lines[i] === 'string'){
+      const old = analysis.lines[i];
+      let cp = 0;
+      const n = Math.min(old.length, line.length);
+      while(cp < n && old[cp] === line[cp]) cp++;
+      raw = (tokByLine[i] || []).filter(t=>t.e <= cp);
+    }
+    const toks = raw.filter(t=>groupInfo[t.g]);
     const words = toks.filter(t=>!t.ph);
     const phrases = toks.filter(t=>t.ph);
     let h = '';
@@ -541,16 +580,24 @@ editor.addEventListener('scroll', ()=>{ highlight.scrollTop = editor.scrollTop; 
 editor.addEventListener('keyup', buildReadout);
 editor.addEventListener('click', buildReadout);
 
-/* ---------- double-click a word -> look it up ---------- */
-editor.addEventListener('dblclick', ()=>{
+/* ---------- double-click (or touch-select) a word -> look it up ---------- */
+function lookupSelection(){
   const sel = editor.value.slice(editor.selectionStart, editor.selectionEnd)
     .trim().replace(/[^A-Za-z']/g,'');
-  if(sel){
+  if(sel && !sel.includes(' ')){
     document.getElementById('lookupInput').value = sel;
     tab('lookup');
     doLookup();
   }
-});
+}
+editor.addEventListener('dblclick', lookupSelection);
+if(window.matchMedia('(pointer: coarse)').matches){
+  // no double-click on touch — long-press word selection does the job
+  editor.addEventListener('select', debounce(()=>{
+    const len = editor.selectionEnd - editor.selectionStart;
+    if(len > 0 && len <= 30) lookupSelection();
+  }, 400));
+}
 
 /* ---------- insert at cursor ---------- */
 function insertAtCursor(word){
@@ -720,16 +767,7 @@ function flash(id,msg){
   setTimeout(()=>b.textContent=o,1100);
 }
 document.getElementById('sampleBtn').addEventListener('click', ()=>{
-  editor.value =
-`I keep the cadence tucked beneath my tongue tonight
-the city hums in amber under fading light
-I trace a melody that never quite takes flight
-and let the silence answer everything I write
-
-Pressure make a diamond, grind it out the coal I hold
-stories that I never told, weathered and a decade old
-chasing something warmer than a chain of gold
-staying up till every borrowed hour is sold`;
+  editor.value = SAMPLE_TEXT;
   render(); analyze(); editor.focus();
 });
 
