@@ -464,17 +464,11 @@ function render(){
         const w = words.find(t=>t.s <= a && b <= t.e);
         const p = phrases.find(t=>t.s <= a && b <= t.e);
         if(!w && !p){ h += text; continue; }
-        let style = '';
-        if(w) style += `background:color-mix(in srgb, ${colorOf(w)} ${w.end ? 24 : 15}%, transparent);`;
-        let ul = null;
-        if(w && w.end){
-          ul = w.slant ? `color-mix(in srgb, ${colorOf(w)} 45%, transparent)` : colorOf(w);
-        }else if(p){
-          ul = p.end && !p.slant ? colorOf(p)
-             : `color-mix(in srgb, ${colorOf(p)} 55%, transparent)`;
-        }
-        if(ul) style += `box-shadow:inset 0 -2px 0 0 ${ul};`;
-        h += `<span class="hseg" style="${style}">${text}</span>`;
+        // fills only: words paint their group color; phrase rhymes paint
+        // the stretches between, so multi-word matches still read as units
+        const alpha = w ? (w.end ? 24 : 15) : (p.end ? 18 : 12);
+        const color = w ? colorOf(w) : colorOf(p);
+        h += `<span class="hseg" style="background:color-mix(in srgb, ${color} ${alpha}%, transparent);">${text}</span>`;
       }
     }
     const m = meterToggle.checked && fresh && analysis.meter
