@@ -201,11 +201,6 @@
   }
   .btn.small { padding: 5px 10px; font-size: 12px; }
   .def-actions { display: flex; gap: 8px; }
-  .suggest {
-    border: 1px dashed var(--line); border-radius: 10px;
-    padding: 10px 12px 12px; margin-bottom: 14px;
-  }
-  .suggest .res-label { margin-top: 0; color: var(--accent); }
   .chip {
     font-size: 13px; background: var(--panel-2); border: 1px solid var(--line);
     color: var(--ink); padding: 5px 10px; border-radius: 999px; cursor: pointer;
@@ -271,7 +266,6 @@ Double-click any word to look it up on the right."></textarea>
     </div>
 
     <div class="panel-body" id="tab-lookup">
-      <div id="suggestBox"></div>
       <div class="lookup-row">
         <input id="lookupInput" placeholder="a word…" autocomplete="off">
         <button class="btn" id="lookupBtn">Go</button>
@@ -522,54 +516,10 @@ function buildReadout(){
   schemeReadout.innerHTML = parts.join(' &nbsp;&nbsp; ');
 }
 
-editor.addEventListener('input', ()=>{ render(); analyzeSoon(); refreshSuggestSoon(); });
+editor.addEventListener('input', ()=>{ render(); analyzeSoon(); });
 editor.addEventListener('scroll', ()=>{ highlight.scrollTop = editor.scrollTop; highlight.scrollLeft = editor.scrollLeft; });
-editor.addEventListener('keyup', ()=>{ buildReadout(); refreshSuggestSoon(); });
-editor.addEventListener('click', ()=>{ buildReadout(); refreshSuggestSoon(); });
-
-/* ============================================================
-   CARET-FOLLOWING SUGGESTIONS — the panel always offers rhymes
-   for the ending of the line you're writing.
-============================================================ */
-const suggestBox = document.getElementById('suggestBox');
-const suggestCache = new Map();
-let lastSuggestWord = null;
-
-function caretEndWord(){
-  const line = editor.value.split('\n')[caretLine()] || '';
-  if(/^\s*[#([]/.test(line)) return null;  // annotation lines
-  const m = line.match(/([A-Za-z][A-Za-z']*)[^A-Za-z']*$/);
-  return m ? m[1].toLowerCase() : null;
-}
-
-async function refreshSuggest(){
-  const w = caretEndWord();
-  if(w === lastSuggestWord) return;
-  lastSuggestWord = w;
-  if(!w){ suggestBox.innerHTML = ''; return; }
-  let data = suggestCache.get(w);
-  if(!data){
-    try{
-      const r = await fetch(`/api/lookup?word=${encodeURIComponent(w)}&mode=rhyme&limit=12`);
-      data = await r.json();
-      suggestCache.set(w, data);
-    }catch(e){ return; }
-  }
-  if(lastSuggestWord !== w) return;  // caret moved on while we fetched
-  const perfect = (data.words || []).slice(0, 9).map(d=>d.word);
-  const near = (data.near || []).slice(0, 5).map(d=>d.word);
-  if(!perfect.length && !near.length){ suggestBox.innerHTML = ''; return; }
-  suggestBox.innerHTML =
-    `<div class="suggest"><div class="res-label">rhymes for this line — “${esc(w)}”</div>` +
-    chipHtml(perfect) + (near.length ? chipHtml(near, 'near') : '') + '</div>';
-  suggestBox.querySelectorAll('.chip').forEach(c=>{
-    c.addEventListener('click', ()=>{
-      document.getElementById('lookupInput').value = c.dataset.w;
-      doLookup();
-    });
-  });
-}
-const refreshSuggestSoon = debounce(refreshSuggest, 350);
+editor.addEventListener('keyup', buildReadout);
+editor.addEventListener('click', buildReadout);
 
 /* ---------- double-click a word -> look it up ---------- */
 editor.addEventListener('dblclick', ()=>{
