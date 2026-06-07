@@ -162,8 +162,13 @@ def phones_for(word: str) -> str | None:
 
 def _rime_from_phones(phones: str) -> str:
     """Everything from the last stressed vowel on, stress markers stripped.
-    This is the classic 'perfect rhyme' key: light/night/tonight all share AY T."""
-    return DIGITS.sub("", pronouncing.rhyming_part(phones))
+    This is the classic 'perfect rhyme' key: light/night/tonight all share
+    AY T. Unstressed pronunciations (DH IH0 S) return their onset too —
+    strip to the vowel so 'this' keys on IH S, not DH IH S."""
+    ph = DIGITS.sub("", pronouncing.rhyming_part(phones)).split()
+    while ph and ph[0] not in ARPA_VOWELS:
+        ph.pop(0)
+    return " ".join(ph)
 
 
 def _tail_vowels(phones: str) -> list[str]:

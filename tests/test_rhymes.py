@@ -585,3 +585,17 @@ def test_vamonos_dominoes():
             "He dead, she dead, he in jail\n"
             "Everyone fallin' like dominoes")
     group_with(text, "vamonos", "dominoes")
+
+
+def test_repeated_this_joins_the_hook_chain():
+    # the unstressed CMU variant (DH IH0 S) used to found "this" on a
+    # consonant-led key that the coda-nest fuse couldn't parse
+    text = ("Yeah I've been killin' this shit\n"
+            "not a single assist\n"
+            "flickin' that wrist\n"
+            "now they fuckin' with this\n"
+            "killin' this shit\n"
+            "not a single assist\n"
+            "flickin' that wrist\n"
+            "now they fuckin' with this")
+    group_with(text, "shit", "assist", "wrist", "this")
