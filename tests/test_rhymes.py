@@ -435,3 +435,13 @@ def test_weak_ending_rhymes_at_line_end():
 def test_cmu_override_stasis():
     # CMU transcribes stasis as "STAH-seez"; everyone says STAY-sis
     group_with("Oasis of stasis", "oasis", "stasis")
+
+
+def test_weak_ending_requires_matching_coda():
+    # divinity ends open (..tee); screams ends IY M Z — same vowel,
+    # different coda, not the same family
+    text = ("Roots surrounding our entirety\n"
+            "Tangled in divinity\n"
+            "Weaving heaven among hellish screams")
+    fam = group_with(text, "entirety", "divinity")
+    assert "screams" not in fam

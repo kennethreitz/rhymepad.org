@@ -211,6 +211,11 @@ def founding_projections(key: str) -> dict[str, str]:
             mk2 = _m2_key(ph)
             if mk2:
                 out["multi2"] = mk2
+            # the founding rime's final syllable, for weak-ending joins
+            for i in range(len(ph) - 1, -1, -1):
+                if ph[i] in ARPA_VOWELS:
+                    out["weak"] = "w:" + " ".join(ph[i:])
+                    break
     elif key.startswith("v:"):  # vowel tail
         out["slant"] = key
         mk = _multi_key(key[2:].split())
@@ -222,6 +227,8 @@ def founding_projections(key: str) -> dict[str, str]:
         out["multi2"] = key
     elif key.startswith("c:"):
         out["vc"] = key
+    elif key.startswith("w:"):
+        out["weak"] = key
     return out
 
 
@@ -344,13 +351,17 @@ def multi_keys(word: str) -> tuple[str, ...]:
 
 
 def weak_end_key(word: str) -> str | None:
-    """The bare final vowel, stress be damned — at line ends poets rhyme
-    the weak syllable (infancy / see, eternity / be)."""
+    """Final-syllable rime, stress be damned — at line ends poets rhyme
+    the weak syllable (infancy / see), but the coda still has to agree
+    (divinity does not rhyme screams)."""
     ph = phones_for(word)
     if not ph:
         return None
-    vowels = _all_vowels(ph)
-    return ("v:" + vowels[-1]) if vowels else None
+    pl = ph.split()
+    for i in range(len(pl) - 1, -1, -1):
+        if pl[i][-1].isdigit():
+            return "w:" + DIGITS.sub("", " ".join(pl[i:]))
+    return None
 
 
 def slant_key(word: str) -> str | None:
@@ -627,7 +638,7 @@ def analyze(draft: Draft):
     # A leftover ending first tries to JOIN an existing group whose
     # founding sound shares its vowel tail (time -> the mind/find group);
     # otherwise leftovers form a new slant group among themselves.
-    group_by_slant = gmap_for("slant")
+    group_by_slant = {**gmap_for("slant"), **gmap_for("weak")}
     by_slant = defaultdict(list)
     for t in tokens:
         if t["is_end"] and id(t) not in grouped:
