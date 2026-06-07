@@ -573,7 +573,7 @@ function render(){
         // gray = an ending still waiting for its answer
         let style = '';
         if(w || p){
-          const alpha = w ? (w.end ? 34 : 14) : (p.end ? 24 : 10);
+          const alpha = w ? (w.end ? 34 : 19) : (p.end ? 24 : 14);
           const color = w ? colorOf(w) : colorOf(p);
           style += `background:color-mix(in srgb, ${color} ${alpha}%, transparent);`;
         }else if(op){
@@ -588,9 +588,24 @@ function render(){
   });
   highlight.innerHTML = html;
   renderStress(lines);
+  syncLayerHeights();
   highlight.scrollTop = editor.scrollTop;
   highlight.scrollLeft = editor.scrollLeft;
   buildReadout();
+}
+
+function syncLayerHeights(){
+  [highlight, stresslayer].forEach(l=>{
+    let sp = l.querySelector('.lspacer');
+    if(!sp){
+      sp = document.createElement('div');
+      sp.className = 'lspacer';
+      l.appendChild(sp);
+    }
+    sp.style.height = '0px';
+    const diff = editor.scrollHeight - l.scrollHeight;
+    if(diff > 0) sp.style.height = diff + 'px';
+  });
 }
 
 function cadenceColors(){
@@ -909,7 +924,7 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
       const pt = phrases.find(t=>t.s <= a && b <= t.e);
       if(!wt && !pt) continue;
       const t = wt || pt;
-      x.globalAlpha = wt ? (wt.end ? 0.34 : 0.14) : (pt.end ? 0.24 : 0.10);
+      x.globalAlpha = wt ? (wt.end ? 0.34 : 0.19) : (pt.end ? 0.24 : 0.14);
       x.fillStyle = palette[groupInfo[t.g].color % COLORS];
       const x0 = PAD + x.measureText(line.slice(0, a)).width;
       const wpx = x.measureText(line.slice(a, b)).width;
