@@ -567,3 +567,21 @@ def test_unanswered_endings_reported():
     opens = {res["lines"][o["l"]][o["s"]:o["e"]] for o in res["open"]}
     assert "blue" in opens and "end" in opens
     assert "hat" not in opens and "cat" not in opens
+
+
+def test_hook_coda_chain_fuses():
+    # Logic's hook: wrist (IH S T) is the hub; this (IH S) and shit
+    # (IH T) ride it as slant satellites — one color, kinda-rhymes kept
+    text = ("Yeah I've been killin' this shit\n"
+            "Yeah I've been hard in the paint, not a single assist\n"
+            "Yeah I've been flickin' that wrist\n"
+            "Yeah I've been cookin' that shit, now they fuckin' with this")
+    group_with(text, "shit", "assist", "wrist", "this")
+
+
+def test_vamonos_dominoes():
+    # final s/z voicing neutralizes: -nos rhymes -noes
+    text = ("my members go quicker than vamonos\n"
+            "He dead, she dead, he in jail\n"
+            "Everyone fallin' like dominoes")
+    group_with(text, "vamonos", "dominoes")

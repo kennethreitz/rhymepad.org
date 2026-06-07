@@ -219,7 +219,8 @@ def founding_projections(key: str) -> dict[str, str]:
             # the founding rime's final syllable, for weak-ending joins
             for i in range(len(ph) - 1, -1, -1):
                 if ph[i] in ARPA_VOWELS:
-                    out["weak"] = "w:" + " ".join(ph[i:])
+                    out["weak"] = "w:" + " ".join(
+                        [ph[i]] + [_coda_class(c) for c in ph[i + 1:]])
                     break
     elif key.startswith("v:"):  # vowel tail
         out["slant"] = key
@@ -288,8 +289,11 @@ NASALS = {"M", "N", "NG"}
 
 
 def _coda_class(c: str) -> str:
-    """damn/hand/plans and time/line ride one nasal class in delivery."""
-    return "N" if c in NASALS else c
+    """damn/hand/plans ride one nasal class in delivery; final s/z
+    voicing neutralizes too (vamonos/dominoes)."""
+    if c in NASALS:
+        return "N"
+    return "S" if c == "Z" else c
 
 
 def vc_key(word: str) -> str | None:
@@ -365,7 +369,9 @@ def weak_end_key(word: str) -> str | None:
     pl = ph.split()
     for i in range(len(pl) - 1, -1, -1):
         if pl[i][-1].isdigit():
-            return "w:" + DIGITS.sub("", " ".join(pl[i:]))
+            syl = [DIGITS.sub("", p) for p in pl[i:]]
+            out = [syl[0]] + [_coda_class(c) for c in syl[1:]]
+            return "w:" + " ".join(out)
     return None
 
 
@@ -907,6 +913,67 @@ def analyze(draft: Draft):
             tgt["key"] = g["key"]
         tgt["toks"].extend(g["toks"])
     raw_groups = fused
+
+    # fuse single-vowel perfect families whose coda classes NEST — the
+    # hook chain: wrist (IH S T) is the hub that pulls in this (IH S, a
+    # prefix) and shit (IH T, a suffix). Same-vowel families with nested
+    # codas read as one chain in delivery; absorbed members mark slant.
+    def _sv_parse(g):
+        key = g["key"]
+        if not key.startswith("p:"):
+            return None
+        ph = key[2:].split()
+        if not ph or ph[0] not in ARPA_VOWELS:
+            return None
+        if any(p in ARPA_VOWELS for p in ph[1:]):
+            return None
+        coda = tuple(_coda_class(c) for c in ph[1:])
+        return (ph[0], coda) if coda else None
+
+    sv = [(gi, p) for gi, p in ((gi, _sv_parse(g))
+                                for gi, g in enumerate(raw_groups)) if p]
+    parent = list(range(len(raw_groups)))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for ai in range(len(sv)):
+        for bi in range(ai + 1, len(sv)):
+            gi, (va, ca) = sv[ai]
+            gj, (vb, cb) = sv[bi]
+            if va != vb or ca == cb:
+                continue
+            s, l = (ca, cb) if len(ca) < len(cb) else (cb, ca)
+            if l[:len(s)] == s or l[len(l) - len(s):] == s:
+                parent[find(gi)] = find(gj)
+
+    clusters = defaultdict(list)
+    for gi in range(len(raw_groups)):
+        clusters[find(gi)].append(gi)
+    if any(len(m) > 1 for m in clusters.values()):
+        def _coda_len(gi):
+            p = _sv_parse(raw_groups[gi])
+            return len(p[1]) if p else 0
+        fused2 = []
+        for members in clusters.values():
+            if len(members) == 1:
+                fused2.append(raw_groups[members[0]])
+                continue
+            hub = max(members,
+                      key=lambda gi: (_coda_len(gi),
+                                      len(raw_groups[gi]["toks"])))
+            core = raw_groups[hub]
+            for gi in members:
+                if gi == hub:
+                    continue
+                for t in raw_groups[gi]["toks"]:
+                    t["slant"] = True
+                core["toks"].extend(raw_groups[gi]["toks"])
+            fused2.append(core)
+        raw_groups = fused2
 
     # stable colors: order groups by first appearance
     raw_groups.sort(key=lambda g: min((t["line"], t["start"]) for t in g["toks"]))
