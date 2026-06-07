@@ -238,7 +238,13 @@
   .tempo-row { display:flex; align-items:center; gap:10px; margin-top: 8px; }
   .tempo-row input[type=range] { flex:1; accent-color: var(--accent); }
   .tempo-val { font-variant-numeric: tabular-nums; color: var(--accent-2); min-width: 64px; text-align:right; font-size:13px;}
-  .beat-controls { display:flex; gap:8px; margin-top:12px; }
+  .beat-controls { display:flex; gap:8px; margin-top:12px; align-items:center; }
+  .beat-ind { display:flex; gap:6px; margin-left:auto; }
+  .beat-ind span {
+    width:9px; height:9px; border-radius:50%;
+    background: var(--line); transition: background .05s;
+  }
+  .beat-ind span.on { background: var(--accent); }
   footer { grid-column: 1 / -1; }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-thumb { background: #3a342d; border-radius: 6px; border: 2px solid var(--panel); }
@@ -328,6 +334,8 @@ Double-click any word to look it up on the right."></textarea>
         <div class="beat-controls">
           <button class="btn primary" id="playBeat">Play</button>
           <button class="btn" id="stopBeat">Stop</button>
+          <button class="btn" id="tapBtn" title="Tap a few times to set the tempo">Tap</button>
+          <div class="beat-ind" id="beatInd"><span></span><span></span><span></span><span></span></div>
         </div>
       </div>
     </div>
@@ -593,7 +601,11 @@ function cadenceColors(){
   if(!analysis || !analysis.meter) return map;
   const byPat = {};
   analysis.meter.forEach(m=>{
-    if(m.stress && m.stress.length >= 5) (byPat[m.stress] ||= []).push(m.l);
+    if(!m.stress || m.stress.length < 5) return;
+    // flexible monosyllables (x) read as stressed in delivery, so
+    // "x01" and "101" are the same flow
+    const key = m.stress.replace(/x/g, '1');
+    (byPat[key] ||= []).push(m.l);
   });
   let fid = 0;
   Object.keys(byPat).sort().forEach(pat=>{
@@ -1042,13 +1054,24 @@ const tab = (name)=>{
 };
 document.querySelectorAll('.tab').forEach(t=> t.addEventListener('click', ()=>tab(t.dataset.tab)));
 
+// bass: [step, semitone offset, length in 16ths]
 const PATTERNS = {
-  'Boom Bap':   {bpm:90,  kick:[0,6,8],          snare:[4,12],     hat:[0,2,4,6,8,10,12,14], swing:0.12},
-  'Trap':       {bpm:140, kick:[0,3,7,8,11],     snare:[8],        hat:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], swing:0},
-  'Lo-Fi':      {bpm:75,  kick:[0,8],            snare:[4,12],     hat:[2,6,10,14], swing:0.18},
-  'Drill':      {bpm:142, kick:[0,3,6,10,11],    snare:[4,12,13],  hat:[0,2,4,6,8,10,12,14], swing:0.05},
-  'Spoken/Jazz':{bpm:96,  kick:[0,10],           snare:[4,12],     hat:[0,3,6,9,12,15], swing:0.2},
-  'West Coast': {bpm:94,  kick:[0,6,8,14],       snare:[4,12],     hat:[0,2,4,6,8,10,12,14], swing:0.08}
+  'Boom Bap':   {bpm:90,  kick:[0,6,8],        snare:[4,12], hat:[0,2,4,6,8,10,12,14], swing:0.12,
+                 bass:[[0,0,2],[6,0,1],[8,0,2],[14,3,1]]},
+  'Trap':       {bpm:140, kick:[0,3,7,8,11],   snare:[8],    hat:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], swing:0,
+                 clap:true, bass:[[0,0,3],[7,-2,1],[8,0,3],[11,3,2]]},
+  'Lo-Fi':      {bpm:75,  kick:[0,8],          snare:[4,12], hat:[2,6,10,14], swing:0.18,
+                 ohat:[10], bass:[[0,0,3],[8,5,3],[12,3,2]]},
+  'Drill':      {bpm:142, kick:[0,3,6,10,11],  snare:[4,12,13], hat:[0,2,4,6,8,10,12,14], swing:0.05,
+                 bass:[[0,0,2],[3,1,2],[6,-2,2],[10,0,1],[11,3,2]]},
+  'Spoken/Jazz':{bpm:96,  kick:[0,10],         snare:[4,12], hat:[0,3,6,9,12,15], swing:0.2,
+                 ohat:[14], bass:[[0,0,2],[4,7,2],[8,5,2],[12,3,2]]},
+  'West Coast': {bpm:94,  kick:[0,6,8,14],     snare:[4,12], hat:[0,2,4,6,8,10,12,14], swing:0.08,
+                 bass:[[0,0,2],[6,0,1],[8,-4,2],[14,0,1]]},
+  'Halftime':   {bpm:74,  kick:[0,10],         snare:[8],    hat:[0,2,4,6,8,10,12,14], swing:0.1,
+                 clap:true, ohat:[6], bass:[[0,0,6],[10,-2,4]]},
+  'Dembow':     {bpm:96,  kick:[0,4,8,12],     snare:[3,6,11,14], hat:[0,2,4,6,8,10,12,14], swing:0,
+                 bass:[[0,0,3],[6,0,1],[8,0,3],[14,0,1]]}
 };
 
 let actx=null, masterGain=null, playing=false, schedTimer=null, current='Boom Bap', step=0, nextTime=0;
@@ -1108,8 +1131,42 @@ function hat(t){
   const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
   noise.buffer=buf;
   const f=actx.createBiquadFilter(); f.type='highpass'; f.frequency.value=7000;
-  const g=actx.createGain(); g.gain.setValueAtTime(0.3,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.05);
+  const g=actx.createGain();
+  g.gain.setValueAtTime(0.2 + Math.random()*0.12, t);  // humanized
+  g.gain.exponentialRampToValueAtTime(0.001,t+0.05);
   noise.connect(f).connect(g).connect(masterGain); noise.start(t); noise.stop(t+0.06);
+}
+function ohat(t){
+  const noise=actx.createBufferSource();
+  const buf=actx.createBuffer(1, actx.sampleRate*0.3, actx.sampleRate);
+  const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  noise.buffer=buf;
+  const f=actx.createBiquadFilter(); f.type='highpass'; f.frequency.value=6000;
+  const g=actx.createGain(); g.gain.setValueAtTime(0.16,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.28);
+  noise.connect(f).connect(g).connect(masterGain); noise.start(t); noise.stop(t+0.3);
+}
+function clap(t){
+  for(let k=0;k<3;k++){
+    const n=actx.createBufferSource();
+    const buf=actx.createBuffer(1, actx.sampleRate*0.08, actx.sampleRate);
+    const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+    n.buffer=buf;
+    const f=actx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1500; f.Q.value=1.2;
+    const g=actx.createGain(); const tt=t+k*0.012;
+    g.gain.setValueAtTime(0.3,tt); g.gain.exponentialRampToValueAtTime(0.001,tt+0.09);
+    n.connect(f).connect(g).connect(masterGain); n.start(tt); n.stop(tt+0.12);
+  }
+}
+function bass(t, semi, lenSteps, secPer16){
+  const o=actx.createOscillator(), g=actx.createGain();
+  o.type='sine';
+  const f0 = 55 * Math.pow(2, semi/12);
+  o.frequency.setValueAtTime(f0*2, t);
+  o.frequency.exponentialRampToValueAtTime(f0, t+0.035);
+  const len = Math.max(0.12, lenSteps * secPer16 * 0.95);
+  g.gain.setValueAtTime(0.5, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t+len);
+  o.connect(g).connect(masterGain); o.start(t); o.stop(t+len+0.05);
 }
 
 function scheduler(){
@@ -1120,13 +1177,35 @@ function scheduler(){
     const swing = (s%2===1) ? secPer16 * (p.swing||0) : 0;
     const t = nextTime + swing;
     if(p.kick.includes(s)) kick(t);
-    if(p.snare.includes(s)) snare(t);
+    if(p.snare.includes(s)){ snare(t); if(p.clap) clap(t); }
     if(p.hat.includes(s)) hat(t);
+    if(p.ohat && p.ohat.includes(s)) ohat(t);
+    if(p.bass) p.bass.forEach(([bs, semi, len])=>{ if(bs === s) bass(t, semi, len, secPer16); });
+    if(s % 4 === 0){
+      const beat = s / 4;
+      setTimeout(()=>flashBeat(beat), Math.max(0, (t - actx.currentTime) * 1000));
+    }
     nextTime += secPer16;
     step++;
   }
   schedTimer = setTimeout(scheduler, 25);
 }
+const beatInd = document.getElementById('beatInd');
+function flashBeat(n){
+  if(!playing) return;
+  [...beatInd.children].forEach((d, i)=> d.classList.toggle('on', i === n));
+}
+const taps = [];
+document.getElementById('tapBtn').addEventListener('click', ()=>{
+  const now = performance.now();
+  if(taps.length && now - taps[taps.length - 1] > 2000) taps.length = 0;
+  taps.push(now);
+  if(taps.length >= 2){
+    const iv = (taps[taps.length - 1] - taps[0]) / (taps.length - 1);
+    setTempo(Math.max(60, Math.min(180, Math.round(60000 / iv))));
+  }
+});
+
 function startBeat(){
   ensureCtx(); if(actx.state==='suspended') actx.resume();
   if(playing) return;
@@ -1136,6 +1215,7 @@ function startBeat(){
 }
 function stopBeat(){
   playing=false; clearTimeout(schedTimer);
+  [...beatInd.children].forEach(d=>d.classList.remove('on'));
   document.querySelectorAll('.beat').forEach(b=>b.classList.remove('playing'));
   document.getElementById('playBeat').textContent='Play';
 }
