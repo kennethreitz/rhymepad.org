@@ -275,8 +275,8 @@ Double-click any word to look it up on the right."></textarea>
     </div>
     <div class="toolbar">
       <button class="btn primary" id="copyBtn">Copy to clipboard</button>
-      <button class="btn" id="sampleBtn">Load sample</button>
-      <label class="mtoggle"><input type="checkbox" id="meterToggle"> meter check</label>
+      <button class="btn" id="sampleBtn" title="Replace this draft with the demo verses">Load sample</button>
+      <label class="mtoggle" title="Flag lines that break their stanza's syllable pattern"><input type="checkbox" id="meterToggle"> meter check</label>
       <div class="scheme-readout" id="schemeReadout"></div>
     </div>
   </div>
@@ -310,6 +310,11 @@ Double-click any word to look it up on the right."></textarea>
           <span class="muted">Tempo</span>
           <input type="range" id="tempo" min="60" max="180" value="90">
           <span class="tempo-val" id="tempoVal">90 BPM</span>
+        </div>
+        <div class="tempo-row">
+          <span class="muted">Volume</span>
+          <input type="range" id="vol" min="0" max="100" value="70">
+          <span class="tempo-val" id="volVal">70%</span>
         </div>
         <div class="beat-controls">
           <button class="btn primary" id="playBeat">Play</button>
@@ -396,6 +401,8 @@ function persist(){
       const el = draftsBar.querySelector('.dtab.active .dtitle');
       if(el) el.textContent = title;
     }
+    document.title = (title && title !== 'Untitled')
+      ? title + ' · RhymePad' : 'RhymePad — a scratchpad for poets & rappers';
     saveDocs();
   }catch(e){ /* storage full/blocked */ }
 }
@@ -631,10 +638,13 @@ modeSeg.addEventListener('click', e=>{
 document.getElementById('lookupBtn').addEventListener('click', doLookup);
 document.getElementById('lookupInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doLookup(); });
 
+const lookupInput = document.getElementById('lookupInput');
+lookupInput.addEventListener('focus', ()=> lookupInput.select());
 const resultsBox = document.getElementById('lookupResults');
 async function doLookup(){
   const word = document.getElementById('lookupInput').value.trim();
   if(!word) return;
+  document.getElementById('tab-lookup').scrollTop = 0;
   showDefinition(word);  // the definition always pins on top
   resultsBox.innerHTML = '<p class="muted">Searching…</p>';
   try{
@@ -791,7 +801,7 @@ const PATTERNS = {
   'West Coast': {bpm:94,  kick:[0,6,8,14],       snare:[4,12],     hat:[0,2,4,6,8,10,12,14], swing:0.08}
 };
 
-let actx=null, playing=false, schedTimer=null, current='Boom Bap', step=0, nextTime=0;
+let actx=null, masterGain=null, playing=false, schedTimer=null, current='Boom Bap', step=0, nextTime=0;
 let userTempo = 90;
 
 const beatGrid = document.getElementById('beatGrid');
@@ -812,13 +822,26 @@ const tempoEl = document.getElementById('tempo'), tempoVal=document.getElementBy
 function setTempo(v){ userTempo=+v; tempoEl.value=v; tempoVal.textContent = v+' BPM'; }
 tempoEl.addEventListener('input', e=> setTempo(e.target.value));
 
-function ensureCtx(){ if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)(); }
+function ensureCtx(){
+  if(!actx){
+    actx = new (window.AudioContext||window.webkitAudioContext)();
+    masterGain = actx.createGain();
+    masterGain.connect(actx.destination);
+    setVol(volEl.value);
+  }
+}
+const volEl = document.getElementById('vol'), volVal = document.getElementById('volVal');
+function setVol(v){
+  volVal.textContent = v + '%';
+  if(masterGain) masterGain.gain.value = Math.pow(v / 100, 2);  // perceptual
+}
+volEl.addEventListener('input', e=> setVol(e.target.value));
 
 function kick(t){
   const o=actx.createOscillator(), g=actx.createGain();
   o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(50,t+0.12);
   g.gain.setValueAtTime(0.9,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
-  o.connect(g).connect(actx.destination); o.start(t); o.stop(t+0.2);
+  o.connect(g).connect(masterGain); o.start(t); o.stop(t+0.2);
 }
 function snare(t){
   const noise=actx.createBufferSource();
@@ -827,7 +850,7 @@ function snare(t){
   noise.buffer=buf;
   const f=actx.createBiquadFilter(); f.type='highpass'; f.frequency.value=1500;
   const g=actx.createGain(); g.gain.setValueAtTime(0.6,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
-  noise.connect(f).connect(g).connect(actx.destination); noise.start(t); noise.stop(t+0.2);
+  noise.connect(f).connect(g).connect(masterGain); noise.start(t); noise.stop(t+0.2);
 }
 function hat(t){
   const noise=actx.createBufferSource();
@@ -836,7 +859,7 @@ function hat(t){
   noise.buffer=buf;
   const f=actx.createBiquadFilter(); f.type='highpass'; f.frequency.value=7000;
   const g=actx.createGain(); g.gain.setValueAtTime(0.3,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.05);
-  noise.connect(f).connect(g).connect(actx.destination); noise.start(t); noise.stop(t+0.06);
+  noise.connect(f).connect(g).connect(masterGain); noise.start(t); noise.stop(t+0.06);
 }
 
 function scheduler(){
@@ -868,6 +891,21 @@ function stopBeat(){
 }
 document.getElementById('playBeat').addEventListener('click', startBeat);
 document.getElementById('stopBeat').addEventListener('click', stopBeat);
+
+document.addEventListener('keydown', e=>{
+  if(!(e.metaKey || e.ctrlKey)) return;
+  if(e.key === 's'){
+    e.preventDefault();  // it's already saved — say so
+    const prev = schemeReadout.innerHTML;
+    schemeReadout.innerHTML = 'saved ✓';
+    setTimeout(buildReadout, 900);
+  }else if(e.key === 'k'){
+    e.preventDefault();
+    tab('lookup');
+    lookupInput.focus();
+  }
+});
+if(window.matchMedia('(pointer: fine)').matches) editor.focus();
 
 render();
 analyze();
