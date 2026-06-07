@@ -601,7 +601,10 @@ function render(){
                   : (w || p);
           let alpha = !t.ph ? (t.end ? 34 : 19) : (t.end ? 24 : 14);
           // the caret's family brightens; everything else stays itself
-          if(focusGid !== null && t.g === focusGid) alpha = Math.min(85, Math.round(alpha * 2.8));
+          if(focusGid !== null && t.g === focusGid){
+            alpha = Math.min(85, Math.round(alpha * 2.8));
+            style += 'color:#1a120c;font-weight:600;';  // dark ink on the lit chip
+          }
           style += `background:color-mix(in srgb, ${colorOf(t)} ${alpha}%, transparent);`;
         }else if(op){
           style += `background:color-mix(in srgb, var(--ink-dim) 13%, transparent);`;
