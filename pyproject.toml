@@ -1,0 +1,21 @@
+[project]
+name = "rhymepad"
+version = "0.1.0"
+description = "A scratchpad for poets & rappers — phoneme-aware rhyme-scheme detection."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "pronouncing>=0.2",
+    "wordfreq>=3.0",
+    "g2p-en>=2.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

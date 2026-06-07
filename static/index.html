@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RhymePad</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,900&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #14110f;
+    --panel: #1c1916;
+    --panel-2: #221e1a;
+    --ink: #f2e9dd;
+    --ink-dim: #a79a89;
+    --line: #322c26;
+    --accent: #e8814a;
+    --accent-2: #d4a843;
+    /* rhyme group colors — distinct, warm-leaning, readable on dark */
+    --r0:#e8814a; --r1:#4ea3e8; --r2:#6fd08c; --r3:#d46fb8;
+    --r4:#d4a843; --r5:#9b7ce8; --r6:#e85a5a; --r7:#46cabf;
+    --r8:#c0d44e; --r9:#e8a0c0; --r10:#7ad4d4; --r11:#d9824e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(232,129,74,0.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(78,163,232,0.07), transparent 55%),
+      var(--bg);
+    color: var(--ink);
+    font-family: 'Spline Sans Mono', monospace;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    grid-template-rows: auto 1fr auto;
+    gap: 14px;
+    height: 100vh;
+    padding: 16px;
+  }
+  header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 10px;
+  }
+  .brand {
+    font-family: 'Fraunces', serif;
+    font-weight: 900;
+    font-size: 30px;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .brand span { color: var(--accent); }
+  .tagline { color: var(--ink-dim); font-size: 12px; letter-spacing: 0.04em; }
+
+  /* ---- editor side ---- */
+  .editor-col { display: flex; flex-direction: column; min-height: 0; gap: 10px; }
+  .editor-shell {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  /* highlight layer + textarea share the exact same box metrics */
+  #highlight, #editor {
+    position: absolute; inset: 0;
+    margin: 0; border: 0;
+    padding: 22px 24px;
+    font: inherit;
+    line-height: 1.9;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-y: auto;
+    letter-spacing: 0;
+    tab-size: 4;
+  }
+  #highlight {
+    pointer-events: none;
+    color: transparent;
+    z-index: 1;
+  }
+  #editor {
+    background: transparent;
+    color: var(--ink);
+    caret-color: var(--accent);
+    resize: none;
+    z-index: 2;
+    outline: none;
+  }
+  #editor::placeholder { color: #5a5249; }
+  /* colored rhyme tokens — background tint only, so the textarea text on
+     top stays crisp and box metrics stay identical (no horizontal padding!) */
+  .rh {
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--c) 15%, transparent);
+  }
+  .rh.end {
+    background: color-mix(in srgb, var(--c) 24%, transparent);
+    box-shadow: inset 0 -2px 0 0 var(--c);
+  }
+  .rh.slant.end {
+    box-shadow: inset 0 -2px 0 0 color-mix(in srgb, var(--c) 45%, transparent);
+  }
+  .toolbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .btn {
+    font-family: inherit; font-size: 13px;
+    background: var(--panel-2);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); color: #1a120c; border-color: var(--accent); font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.08); color: #1a120c; }
+  .scheme-readout {
+    margin-left: auto; color: var(--ink-dim); font-size: 12px;
+    letter-spacing: 0.15em;
+  }
+  .scheme-readout b { color: var(--accent-2); letter-spacing: 0.15em; }
+  .scheme-readout .offline { color: var(--r6); letter-spacing: 0.02em; }
+
+  /* ---- stanza reorder overlay ---- */
+  #reorderOverlay {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(10,8,6,0.7); backdrop-filter: blur(3px);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #reorderOverlay[hidden] { display: none; }
+  .reorder-box {
+    width: min(560px, 92vw); max-height: 80vh;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .reorder-box h3 {
+    margin: 0; padding: 16px 20px 12px;
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px;
+  }
+  .reorder-box .hint { padding: 0 20px 10px; color: var(--ink-dim); font-size: 12px; }
+  #stanzaList { padding: 0 16px 8px; overflow-y: auto; flex: 1; }
+  .stanza-card {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 8px; cursor: grab;
+    transition: border-color .15s, opacity .15s;
+  }
+  .stanza-card:active { cursor: grabbing; }
+  .stanza-card.dragging { opacity: 0.35; }
+  .stanza-card.drop-above { border-top: 2px solid var(--accent); }
+  .stanza-card.drop-below { border-bottom: 2px solid var(--accent); }
+  .stanza-card .grip { color: var(--ink-dim); font-size: 16px; user-select: none; }
+  .stanza-card .preview { flex: 1; min-width: 0; }
+  .stanza-card .first-line {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px;
+  }
+  .stanza-card .meta-line { color: var(--ink-dim); font-size: 11px; margin-top: 3px; }
+  .stanza-card .scheme-badge {
+    color: var(--accent-2); font-size: 11px; letter-spacing: 0.18em;
+    text-transform: uppercase; white-space: nowrap;
+  }
+  .reorder-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 16px; }
+
+  /* ---- side panel ---- */
+  aside {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    display: flex; flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .tab {
+    flex: 1; padding: 12px 0; text-align: center; cursor: pointer;
+    font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-dim); background: transparent; border: 0;
+    font-family: inherit; transition: color .15s;
+  }
+  .tab.active { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+  .tab:hover { color: var(--ink); }
+  .panel-body { padding: 16px; overflow-y: auto; flex: 1; }
+  .lookup-row { display: flex; gap: 8px; }
+  .lookup-row input {
+    flex: 1; font-family: inherit; font-size: 14px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--ink); padding: 9px 12px; border-radius: 8px; outline: none;
+  }
+  .lookup-row input:focus { border-color: var(--accent); }
+  .seg { display: flex; gap: 4px; margin: 14px 0 10px; }
+  .seg button {
+    flex: 1; font-family: inherit; font-size: 11px; letter-spacing: .04em;
+    background: var(--panel-2); color: var(--ink-dim); border: 1px solid var(--line);
+    padding: 7px 0; border-radius: 7px; cursor: pointer; text-transform: uppercase;
+  }
+  .seg button.active { color: var(--accent); border-color: var(--accent); }
+  .results { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 6px; }
+  .chip {
+    font-size: 13px; background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--ink); padding: 5px 10px; border-radius: 999px; cursor: pointer;
+    transition: all .12s;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+  .muted { color: var(--ink-dim); font-size: 13px; line-height: 1.6; }
+  .res-label { font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-dim); margin:16px 0 4px; }
+
+  /* beats */
+  .beat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .beat {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px;
+    padding: 12px; cursor: pointer; transition: all .15s;
+  }
+  .beat:hover { border-color: var(--accent); }
+  .beat.playing { border-color: var(--accent); background: rgba(232,129,74,0.1); }
+  .beat .name { font-weight: 600; font-size: 13px; }
+  .beat .bpm { color: var(--ink-dim); font-size: 11px; margin-top: 2px; }
+  .transport { margin-top: 16px; }
+  .tempo-row { display:flex; align-items:center; gap:10px; margin-top: 8px; }
+  .tempo-row input[type=range] { flex:1; accent-color: var(--accent); }
+  .tempo-val { font-variant-numeric: tabular-nums; color: var(--accent-2); min-width: 64px; text-align:right; font-size:13px;}
+  .beat-controls { display:flex; gap:8px; margin-top:12px; }
+  .legend { margin-top: 14px; }
+  .legend-item { display:flex; align-items:center; gap:8px; font-size:12px; margin:5px 0; color: var(--ink-dim); }
+  .swatch { width:14px; height:14px; border-radius:4px; }
+  footer { grid-column: 1 / -1; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #3a342d; border-radius: 6px; border: 2px solid var(--panel); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">Rhyme<span>Pad</span></div>
+    <div class="tagline">a scratchpad for poets &amp; rappers — real phonetic rhyme detection</div>
+  </header>
+
+  <!-- EDITOR -->
+  <div class="editor-col">
+    <div class="editor-shell">
+      <div id="highlight"></div>
+      <textarea id="editor" spellcheck="false" placeholder="Start writing. Leave a blank line between stanzas.
+Rhymes are detected phonetically — line endings get the underline,
+internal rhymes get the soft glow, same color = same sound.
+Double-click any word to look it up on the right."></textarea>
+    </div>
+    <div class="toolbar">
+      <button class="btn primary" id="copyBtn">Copy to clipboard</button>
+      <button class="btn" id="reorderBtn">Reorder stanzas</button>
+      <button class="btn" id="clearBtn">Clear</button>
+      <button class="btn" id="sampleBtn">Load sample</button>
+      <div class="scheme-readout" id="schemeReadout"></div>
+    </div>
+  </div>
+
+  <!-- PANEL -->
+  <aside>
+    <div class="tabs">
+      <button class="tab active" data-tab="lookup">Rhymes &amp; Synonyms</button>
+      <button class="tab" data-tab="beats">Beats</button>
+    </div>
+
+    <div class="panel-body" id="tab-lookup">
+      <div class="lookup-row">
+        <input id="lookupInput" placeholder="a word…" autocomplete="off">
+        <button class="btn" id="lookupBtn">Go</button>
+      </div>
+      <div class="seg" id="modeSeg">
+        <button class="active" data-mode="rhyme">Rhymes</button>
+        <button data-mode="near">Near rhymes</button>
+        <button data-mode="syn">Synonyms</button>
+      </div>
+      <div id="lookupResults">
+        <p class="muted">Type a word and hit Go, or double-click a word in your draft. Click any result to insert it at the cursor.</p>
+      </div>
+      <div class="legend">
+        <div class="res-label">Current stanza</div>
+        <div id="legendBox"><p class="muted">No rhymes detected yet.</p></div>
+      </div>
+    </div>
+
+    <div class="panel-body" id="tab-beats" style="display:none">
+      <div class="beat-grid" id="beatGrid"></div>
+      <div class="transport">
+        <div class="tempo-row">
+          <span class="muted">Tempo</span>
+          <input type="range" id="tempo" min="60" max="180" value="90">
+          <span class="tempo-val" id="tempoVal">90 BPM</span>
+        </div>
+        <div class="beat-controls">
+          <button class="btn primary" id="playBeat">Play</button>
+          <button class="btn" id="stopBeat">Stop</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <footer></footer>
+</div>
+
+<!-- STANZA REORDER -->
+<div id="reorderOverlay" hidden>
+  <div class="reorder-box">
+    <h3>Reorder stanzas</h3>
+    <div class="hint">Drag cards to rearrange. Changes apply instantly.</div>
+    <div id="stanzaList"></div>
+    <div class="reorder-actions">
+      <button class="btn primary" id="reorderDone">Done</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   ANALYSIS — real phonetic rhyme detection lives in the Python
+   backend (CMU pronouncing dictionary). We POST the draft and
+   get back colored token spans:
+     end rhymes   -> underline + tint
+     internal     -> soft tint
+     slant rhymes -> faded underline (shared vowel sound)
+============================================================ */
+const editor = document.getElementById('editor');
+const highlight = document.getElementById('highlight');
+const schemeReadout = document.getElementById('schemeReadout');
+const COLORS = 12;
+
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+
+let analysis = null;      // last server response
+let backendOk = true;
+
+/* ---------- draft persistence — nothing gets lost on a stray refresh ---------- */
+const DRAFT_KEY = 'rhymepad.draft';
+editor.value = localStorage.getItem(DRAFT_KEY) || '';
+function persist(){
+  try{ localStorage.setItem(DRAFT_KEY, editor.value); }catch(e){ /* storage full/blocked */ }
+}
+
+async function analyze(){
+  const text = editor.value;
+  try{
+    const r = await fetch('/api/analyze', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({text})
+    });
+    analysis = await r.json();
+    backendOk = true;
+  }catch(e){
+    backendOk = false;
+  }
+  render();
+}
+const analyzeSoon = debounce(analyze, 250);
+
+function render(){
+  persist();
+  const lines = editor.value.split('\n');
+  const tokByLine = {};
+  const groupInfo = {};
+  if(analysis){
+    analysis.groups.forEach(g=>{ groupInfo[g.id] = g; });
+    analysis.tokens.forEach(t=>{ (tokByLine[t.l] ||= []).push(t); });
+  }
+  let html = '';
+  lines.forEach((line, i)=>{
+    // only apply spans if this line still matches what the server analyzed
+    const fresh = analysis && analysis.lines[i] === line;
+    const toks = fresh ? (tokByLine[i] || []) : [];
+    toks.sort((a,b)=>a.s-b.s);
+    let pos = 0, h = '';
+    toks.forEach(t=>{
+      const g = groupInfo[t.g]; if(!g || t.s < pos) return;
+      h += esc(line.slice(pos, t.s));
+      const cls = 'rh' + (t.end ? ' end' : '') + (t.slant ? ' slant' : '');
+      h += `<span class="${cls}" style="--c:var(--r${g.color % COLORS})">` + esc(line.slice(t.s, t.e)) + '</span>';
+      pos = t.e;
+    });
+    h += esc(line.slice(pos));
+    html += h + '\n';
+  });
+  highlight.innerHTML = html;
+  highlight.scrollTop = editor.scrollTop;
+  highlight.scrollLeft = editor.scrollLeft;
+  buildReadout();
+  buildLegend();
+}
+
+function caretLine(){
+  return editor.value.slice(0, editor.selectionStart).split('\n').length - 1;
+}
+function caretStanza(){
+  if(!analysis || !analysis.stanzas.length) return null;
+  const ln = caretLine();
+  return analysis.stanzas.find(s=>s.lines.includes(ln))
+      || analysis.stanzas.findLast(s=>s.lines[0] <= ln)
+      || analysis.stanzas[0];
+}
+
+function buildReadout(){
+  if(!backendOk){
+    schemeReadout.innerHTML = '<span class="offline">backend offline — run: uv run uvicorn app:app</span>';
+    return;
+  }
+  const st = caretStanza();
+  if(!st || !st.scheme){ schemeReadout.innerHTML = ''; return; }
+  schemeReadout.innerHTML = `stanza scheme &nbsp;<b>${st.scheme.toUpperCase().split('').join(' ')}</b>`;
+}
+
+function buildLegend(){
+  const box = document.getElementById('legendBox');
+  const st = caretStanza();
+  if(!st || !st.legend.length){ box.innerHTML = '<p class="muted">No rhymes detected yet.</p>'; return; }
+  box.innerHTML = st.legend.map(l=>{
+    const sw = l.color === null
+      ? `<span class="swatch" style="background:#3a342d"></span>`
+      : `<span class="swatch" style="background:var(--r${l.color % COLORS})"></span>`;
+    const note = l.color === null ? ' — no rhyme' : (l.slant ? ' — slant' : '');
+    return `<div class="legend-item">${sw} ending “${l.ch}”${note}</div>`;
+  }).join('');
+}
+
+editor.addEventListener('input', ()=>{ render(); analyzeSoon(); });
+editor.addEventListener('scroll', ()=>{ highlight.scrollTop = editor.scrollTop; highlight.scrollLeft = editor.scrollLeft; });
+editor.addEventListener('keyup', ()=>{ buildReadout(); buildLegend(); });
+editor.addEventListener('click', ()=>{ buildReadout(); buildLegend(); });
+
+/* ---------- double-click a word -> look it up ---------- */
+editor.addEventListener('dblclick', ()=>{
+  const sel = editor.value.slice(editor.selectionStart, editor.selectionEnd)
+    .trim().replace(/[^A-Za-z']/g,'');
+  if(sel){ document.getElementById('lookupInput').value = sel; doLookup(); }
+});
+
+/* ---------- insert at cursor ---------- */
+function insertAtCursor(word){
+  const s = editor.selectionStart, e = editor.selectionEnd;
+  const v = editor.value;
+  const needSpace = s > 0 && !/\s/.test(v[s-1]);
+  const ins = (needSpace ? ' ' : '') + word;
+  editor.value = v.slice(0,s) + ins + v.slice(e);
+  const np = s + ins.length;
+  editor.focus();
+  editor.setSelectionRange(np, np);
+  render();
+  analyzeSoon();
+}
+
+/* ============================================================
+   LOOKUP — rhymes & near rhymes come from our backend (CMU dict,
+   frequency-ranked). Synonyms come from the free Datamuse API.
+============================================================ */
+const modeSeg = document.getElementById('modeSeg');
+let mode = 'rhyme';
+modeSeg.addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  [...modeSeg.children].forEach(c=>c.classList.remove('active'));
+  b.classList.add('active'); mode = b.dataset.mode; doLookup();
+});
+document.getElementById('lookupBtn').addEventListener('click', doLookup);
+document.getElementById('lookupInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doLookup(); });
+
+const resultsBox = document.getElementById('lookupResults');
+async function doLookup(){
+  const word = document.getElementById('lookupInput').value.trim();
+  if(!word) return;
+  resultsBox.innerHTML = '<p class="muted">Searching…</p>';
+  try{
+    if(mode === 'syn'){
+      const r = await fetch(`https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}&ml=${encodeURIComponent(word)}&max=60`);
+      const data = await r.json();
+      renderChips(`Synonyms / related for “${esc(word)}”`, data.map(d=>d.word));
+    }else{
+      const r = await fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=${mode}`);
+      const data = await r.json();
+      if(!data.known){
+        resultsBox.innerHTML = `<p class="muted">“${esc(word)}” isn't in the pronunciation dictionary.</p>`;
+        return;
+      }
+      renderBySyllable(word, data.words, mode === 'near' ? 'Near rhymes' : 'Rhymes');
+    }
+  }catch(err){
+    resultsBox.innerHTML = `<p class="muted">Lookup failed — is the backend running? (${esc(String(err))})</p>`;
+  }
+}
+
+function chipHtml(words){
+  return '<div class="results">' +
+    words.map(w=>`<span class="chip" data-w="${esc(w)}">${esc(w)}</span>`).join('') +
+    '</div>';
+}
+function wireChips(){
+  resultsBox.querySelectorAll('.chip').forEach(c=>{
+    c.addEventListener('click', ()=> insertAtCursor(c.dataset.w));
+  });
+}
+function renderChips(label, words){
+  if(!words.length){ resultsBox.innerHTML = '<p class="muted">No results.</p>'; return; }
+  resultsBox.innerHTML = `<div class="res-label">${label}</div>` + chipHtml(words.slice(0,50));
+  wireChips();
+}
+function renderBySyllable(word, items, label){
+  if(!items.length){ resultsBox.innerHTML = `<p class="muted">No results for “${esc(word)}”.</p>`; return; }
+  const bySyl = {};
+  items.forEach(d=>{ (bySyl[d.syl || 0] ||= []).push(d.word); });
+  let h = `<div class="res-label">${label} for “${esc(word)}”</div>`;
+  Object.keys(bySyl).sort((a,b)=>a-b).forEach(k=>{
+    h += `<div class="res-label">${k == 0 ? '?' : k} syllable${k == 1 ? '' : 's'}</div>` + chipHtml(bySyl[k]);
+  });
+  resultsBox.innerHTML = h;
+  wireChips();
+}
+
+/* ============================================================
+   STANZA REORDER — drag cards to rearrange blank-line-separated
+   stanzas; the draft updates on every drop.
+============================================================ */
+const overlay = document.getElementById('reorderOverlay');
+const stanzaList = document.getElementById('stanzaList');
+let blocks = [];
+
+function openReorder(){
+  blocks = editor.value.split(/\n{2,}/).map(b=>b.trim()).filter(Boolean);
+  if(blocks.length < 2){ flash('reorderBtn','Need 2+ stanzas'); return; }
+  buildCards();
+  overlay.hidden = false;
+}
+function schemeOf(block){
+  if(!analysis) return '';
+  const first = block.split('\n')[0];
+  const idx = analysis.lines.indexOf(first);
+  if(idx < 0) return '';
+  const st = analysis.stanzas.find(s=>s.lines.includes(idx));
+  return st ? st.scheme : '';
+}
+function buildCards(){
+  stanzaList.innerHTML = '';
+  blocks.forEach((b, i)=>{
+    const lines = b.split('\n');
+    const card = document.createElement('div');
+    card.className = 'stanza-card';
+    card.draggable = true;
+    card.dataset.idx = i;
+    const scheme = schemeOf(b);
+    card.innerHTML = `
+      <span class="grip">⠿</span>
+      <span class="preview">
+        <div class="first-line">${esc(lines[0])}</div>
+        <div class="meta-line">${lines.length} line${lines.length===1?'':'s'}</div>
+      </span>
+      ${scheme ? `<span class="scheme-badge">${scheme.split('').join(' ')}</span>` : ''}`;
+    card.addEventListener('dragstart', ()=>{ dragIdx = i; card.classList.add('dragging'); });
+    card.addEventListener('dragend', ()=>{ dragIdx = null; card.classList.remove('dragging'); clearDrops(); });
+    card.addEventListener('dragover', e=>{
+      e.preventDefault();
+      clearDrops();
+      const before = e.offsetY < card.offsetHeight / 2;
+      card.classList.add(before ? 'drop-above' : 'drop-below');
+    });
+    card.addEventListener('drop', e=>{
+      e.preventDefault();
+      if(dragIdx === null) return;
+      const before = e.offsetY < card.offsetHeight / 2;
+      let to = i + (before ? 0 : 1);
+      const [moved] = blocks.splice(dragIdx, 1);
+      if(dragIdx < to) to--;
+      blocks.splice(to, 0, moved);
+      applyBlocks();
+      buildCards();
+    });
+    stanzaList.appendChild(card);
+  });
+}
+let dragIdx = null;
+function clearDrops(){
+  stanzaList.querySelectorAll('.stanza-card').forEach(c=>c.classList.remove('drop-above','drop-below'));
+}
+function applyBlocks(){
+  editor.value = blocks.join('\n\n');
+  render();
+  analyzeSoon();
+}
+document.getElementById('reorderBtn').addEventListener('click', openReorder);
+document.getElementById('reorderDone').addEventListener('click', ()=>{ overlay.hidden = true; editor.focus(); });
+overlay.addEventListener('click', e=>{ if(e.target === overlay){ overlay.hidden = true; editor.focus(); } });
+document.addEventListener('keydown', e=>{ if(e.key === 'Escape' && !overlay.hidden){ overlay.hidden = true; editor.focus(); } });
+
+/* ============================================================
+   COPY / CLEAR / SAMPLE
+============================================================ */
+document.getElementById('copyBtn').addEventListener('click', async ()=>{
+  try{ await navigator.clipboard.writeText(editor.value); flash('copyBtn','Copied!'); }
+  catch{ editor.select(); document.execCommand('copy'); flash('copyBtn','Copied!'); }
+});
+function flash(id,msg){
+  const b=document.getElementById(id); const o=b.textContent; b.textContent=msg;
+  setTimeout(()=>b.textContent=o,1100);
+}
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  if(editor.value.trim()){
+    try{ localStorage.setItem(DRAFT_KEY + '.backup', editor.value); }catch(e){}
+  }
+  editor.value=''; analysis=null; render(); analyze(); editor.focus();
+});
+document.getElementById('sampleBtn').addEventListener('click', ()=>{
+  editor.value =
+`I keep the cadence tucked beneath my tongue tonight
+the city hums in amber under fading light
+I trace a melody that never quite takes flight
+and let the silence answer everything I write
+
+Pressure make a diamond, grind it out the coal I hold
+stories that I never told, weathered and a decade old
+chasing something warmer than a chain of gold
+staying up till every borrowed hour is sold`;
+  render(); analyze(); editor.focus();
+});
+
+/* ============================================================
+   BEATS — Web Audio synthesized drum patterns, adjustable tempo.
+   No external samples; everything is generated.
+============================================================ */
+const tab = (name)=>{
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
+  document.getElementById('tab-lookup').style.display = name==='lookup'?'block':'none';
+  document.getElementById('tab-beats').style.display  = name==='beats'?'block':'none';
+};
+document.querySelectorAll('.tab').forEach(t=> t.addEventListener('click', ()=>tab(t.dataset.tab)));
+
+const PATTERNS = {
+  'Boom Bap':   {bpm:90,  kick:[0,6,8],          snare:[4,12],     hat:[0,2,4,6,8,10,12,14], swing:0.12},
+  'Trap':       {bpm:140, kick:[0,3,7,8,11],     snare:[8],        hat:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], swing:0},
+  'Lo-Fi':      {bpm:75,  kick:[0,8],            snare:[4,12],     hat:[2,6,10,14], swing:0.18},
+  'Drill':      {bpm:142, kick:[0,3,6,10,11],    snare:[4,12,13],  hat:[0,2,4,6,8,10,12,14], swing:0.05},
+  'Spoken/Jazz':{bpm:96,  kick:[0,10],           snare:[4,12],     hat:[0,3,6,9,12,15], swing:0.2},
+  'West Coast': {bpm:94,  kick:[0,6,8,14],       snare:[4,12],     hat:[0,2,4,6,8,10,12,14], swing:0.08}
+};
+
+let actx=null, playing=false, schedTimer=null, current='Boom Bap', step=0, nextTime=0;
+let userTempo = 90;
+
+const beatGrid = document.getElementById('beatGrid');
+Object.entries(PATTERNS).forEach(([name,p])=>{
+  const d=document.createElement('div'); d.className='beat'; d.dataset.name=name;
+  d.innerHTML = `<div class="name">${name}</div><div class="bpm">${p.bpm} BPM feel</div>`;
+  d.addEventListener('click', ()=>{
+    current=name;
+    document.getElementById('tempo').value = p.bpm;
+    setTempo(p.bpm);
+    if(!playing) startBeat();
+    document.querySelectorAll('.beat').forEach(b=>b.classList.toggle('playing', b.dataset.name===name));
+  });
+  beatGrid.appendChild(d);
+});
+
+const tempoEl = document.getElementById('tempo'), tempoVal=document.getElementById('tempoVal');
+function setTempo(v){ userTempo=+v; tempoEl.value=v; tempoVal.textContent = v+' BPM'; }
+tempoEl.addEventListener('input', e=> setTempo(e.target.value));
+
+function ensureCtx(){ if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)(); }
+
+function kick(t){
+  const o=actx.createOscillator(), g=actx.createGain();
+  o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(50,t+0.12);
+  g.gain.setValueAtTime(0.9,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
+  o.connect(g).connect(actx.destination); o.start(t); o.stop(t+0.2);
+}
+function snare(t){
+  const noise=actx.createBufferSource();
+  const buf=actx.createBuffer(1, actx.sampleRate*0.2, actx.sampleRate);
+  const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  noise.buffer=buf;
+  const f=actx.createBiquadFilter(); f.type='highpass'; f.frequency.value=1500;
+  const g=actx.createGain(); g.gain.setValueAtTime(0.6,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
+  noise.connect(f).connect(g).connect(actx.destination); noise.start(t); noise.stop(t+0.2);
+}
+function hat(t){
+  const noise=actx.createBufferSource();
+  const buf=actx.createBuffer(1, actx.sampleRate*0.05, actx.sampleRate);
+  const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  noise.buffer=buf;
+  const f=actx.createBiquadFilter(); f.type='highpass'; f.frequency.value=7000;
+  const g=actx.createGain(); g.gain.setValueAtTime(0.3,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.05);
+  noise.connect(f).connect(g).connect(actx.destination); noise.start(t); noise.stop(t+0.06);
+}
+
+function scheduler(){
+  const p=PATTERNS[current];
+  const secPer16 = (60/userTempo)/4;
+  while(nextTime < actx.currentTime + 0.1){
+    const s = step % 16;
+    const swing = (s%2===1) ? secPer16 * (p.swing||0) : 0;
+    const t = nextTime + swing;
+    if(p.kick.includes(s)) kick(t);
+    if(p.snare.includes(s)) snare(t);
+    if(p.hat.includes(s)) hat(t);
+    nextTime += secPer16;
+    step++;
+  }
+  schedTimer = setTimeout(scheduler, 25);
+}
+function startBeat(){
+  ensureCtx(); if(actx.state==='suspended') actx.resume();
+  if(playing) return;
+  playing=true; step=0; nextTime=actx.currentTime+0.05; scheduler();
+  document.querySelectorAll('.beat').forEach(b=>b.classList.toggle('playing', b.dataset.name===current));
+  document.getElementById('playBeat').textContent='Playing…';
+}
+function stopBeat(){
+  playing=false; clearTimeout(schedTimer);
+  document.querySelectorAll('.beat').forEach(b=>b.classList.remove('playing'));
+  document.getElementById('playBeat').textContent='Play';
+}
+document.getElementById('playBeat').addEventListener('click', startBeat);
+document.getElementById('stopBeat').addEventListener('click', stopBeat);
+
+render();
+analyze();
+</script>
+</body>
+</html>
