@@ -551,13 +551,18 @@ def analyze(draft: Draft):
                 "weak": False,
             })
 
+    # words the draft leans on as refrain/filler (4+ uses) stop lighting
+    # up mid-line — their line-end uses still count
+    counts = Counter(t["word"].lower() for t in tokens)
+    refrain = {w for w, c in counts.items() if c >= 4}
+
     # pass 1: perfect rhymes (shared rime), anywhere in a line — this is
     # what catches internal rhymes. Phrases compete too, so "stir up"
     # perfect-rhymes "syrup" even while its "up" rhymes with "cup".
     by_rime = defaultdict(list)
     for t in tokens:
         w = t["word"].lower()
-        if not t["is_end"] and (w in STOPWORDS or len(w) < 2):
+        if not t["is_end"] and (w in STOPWORDS or w in refrain or len(w) < 2):
             continue
         for key in rime_keys(t["word"]):
             by_rime[key].append(t)
@@ -689,7 +694,7 @@ def analyze(draft: Draft):
         if id(t) in grouped:
             continue
         w = t["word"].lower()
-        if not t["is_end"] and (w in STOPWORDS or len(w) < 2):
+        if not t["is_end"] and (w in STOPWORDS or w in refrain or len(w) < 2):
             continue
         keys = multi_keys(t["word"])
         for key in keys:  # join an existing family if any anchor fits
@@ -796,15 +801,29 @@ def analyze(draft: Draft):
                for s, e in phrase_spans[t["line"]]):
             continue
         w = t["word"].lower()
-        if not t["is_end"] and (w in STOPWORDS or len(w) < 2):
+        if not t["is_end"] and (w in STOPWORDS or w in refrain or len(w) < 2):
             continue
         key = vc_key(t["word"])
         if key:
             attach_or_collect(t, key, by_vc, group_by_vc)
+    def flush_cluster(cluster, key):
+        if (len(cluster) >= 2
+                and len({t["word"].lower() for t in cluster}) >= 2):
+            raw_groups.append({"toks": list(cluster), "slant": True,
+                               "key": key})
+            grouped.update(id(t) for t in cluster)
     for (sid, key), toks in by_vc.items():
-        if len(toks) >= 2 and len({t["word"].lower() for t in toks}) >= 2:
-            raw_groups.append({"toks": toks, "slant": True, "key": key})
-            grouped.update(id(t) for t in toks)
+        # consonance is local evidence: a coda match ten lines away isn't
+        # a rhyme, so clusters break on gaps of more than two lines
+        toks = sorted((t for t in toks if id(t) not in grouped),
+                      key=lambda t: t["line"])
+        cluster = []
+        for t in toks:
+            if cluster and t["line"] - cluster[-1]["line"] > 2:
+                flush_cluster(cluster, key)
+                cluster = []
+            cluster.append(t)
+        flush_cluster(cluster, key)
 
     # pass 5: weak endings, the LAST resort — infancy rhymes see on its
     # unstressed final syllable, but only after every richer reading

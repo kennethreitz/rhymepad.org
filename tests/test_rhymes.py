@@ -477,3 +477,31 @@ def test_schwa_heavy_phrase_cannot_join_word_family():
     text = ("doin' it like Buddha, scuba, Cuba\n"
             "Two bitches at the same time")
     assert "two bitches" not in highlighted(text)
+
+
+def test_swimmers_twist_her_finisher_one_family():
+    text = ("Young Money militia and I am the commissioner\n"
+            "You no wan' start Weezy cause the F is for finisher\n"
+            "Two bitches at the same time, synchronized swimmers\n"
+            "Got the girl twisted cause she open when you twist her\n"
+            "Never met the bitch, but I fuck her like I missed her")
+    group_with(text, "swimmers", "finisher", "commissioner",
+               "twist her", "missed her")
+
+
+def test_refrain_words_go_dark_midline():
+    text = ("the bitch is cold\n"
+            "the bitch is old\n"
+            "a bitch like this\n"
+            "a bitch like that\n"
+            "bitch got gold")
+    group_with(text, "cold", "old", "gold")
+    assert "bitch" not in highlighted(text)
+
+
+def test_consonance_is_local():
+    # speech (line 1) and keep (line 9): a coda match eight lines apart
+    # is not a rhyme
+    filler = "la la la\n" * 7
+    text = "I gave a dumber speech\n" + filler + "I always keep my word"
+    assert "keep" not in highlighted(text)
