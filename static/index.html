@@ -209,6 +209,8 @@
   }
   .btn.small { padding: 5px 10px; font-size: 12px; }
   .def-actions { display: flex; gap: 8px; }
+  .defphon { font-size: 12px; margin: 0 0 10px; line-height: 1.6; }
+  .defphon i { color: var(--accent-2); font-style: normal; }
   .chip {
     font-size: 13px; background: var(--panel-2); border: 1px solid var(--line);
     color: var(--ink); padding: 5px 10px; border-radius: 999px; cursor: pointer;
@@ -296,6 +298,7 @@ Double-click any word to look it up on the right."></textarea>
       <div class="seg" id="modeSeg">
         <button class="active" data-mode="rhyme">Rhymes</button>
         <button data-mode="syn">Synonyms</button>
+        <button data-mode="mosaic" title="Two-word phrases that rhyme with it">Mosaics</button>
       </div>
       <div id="defBox"></div>
       <div id="lookupResults">
@@ -650,7 +653,13 @@ async function doLookup(){
   try{
     const r = await fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=${mode}`);
     const data = await r.json();
-    if(mode === 'syn'){
+    if(mode === 'mosaic'){
+      if(!data.known){
+        resultsBox.innerHTML = `<p class="muted">No two-word mosaics for “${esc(word)}” — try a word with two or more syllables.</p>`;
+        return;
+      }
+      renderMosaics(word, data.words);
+    }else if(mode === 'syn'){
       if(!data.known){
         resultsBox.innerHTML = `<p class="muted">No synonyms found for “${esc(word)}”.</p>`;
         return;
@@ -698,8 +707,37 @@ function defCard(word, inner){
   defBox.querySelector('#defInsert').addEventListener('click', ()=> insertAtCursor(word));
   defBox.querySelector('.defx').addEventListener('click', ()=>{ defBox.innerHTML=''; });
 }
+function draftMates(word){
+  if(!analysis) return [];
+  const lw = word.toLowerCase();
+  const byG = {};
+  analysis.tokens.forEach(t=>{
+    if(t.ph) return;
+    const w = analysis.lines[t.l].slice(t.s, t.e).toLowerCase();
+    (byG[t.g] ||= new Set()).add(w);
+  });
+  const mates = new Set();
+  Object.values(byG).forEach(set=>{
+    if(set.has(lw)) set.forEach(w=>{ if(w !== lw) mates.add(w); });
+  });
+  return [...mates].slice(0, 8);
+}
+
 async function showDefinition(word){
   defCard(word, '<p class="muted">Looking it up…</p>');
+  // phonetic anatomy + draft cross-reference, fetched alongside
+  fetch(`/api/word?word=${encodeURIComponent(word)}`).then(r=>r.json()).then(info=>{
+    const box = defBox.querySelector('.defcard');
+    if(!box || !info.known) return;
+    const dots = [...info.stress].map(s=>s==='1' ? '●' : '○').join('');
+    const mates = draftMates(word);
+    const div = document.createElement('div');
+    div.className = 'muted defphon';
+    div.innerHTML = `/${esc(info.phones.toLowerCase())}/ · ${info.syl} syl ${dots}` +
+      ` · rhymes on <i>${esc(info.rime.toLowerCase())}</i>` +
+      (mates.length ? `<br>in your draft: ${mates.map(esc).join(', ')}` : '');
+    box.insertBefore(div, box.querySelector('.def-actions'));
+  }).catch(()=>{});
   try{
     const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
     if(!r.ok) throw new Error('no entry');
@@ -721,6 +759,15 @@ function renderChips(label, words){
   resultsBox.innerHTML = `<div class="res-label">${label}</div>` + chipHtml(words.slice(0,50));
   wireChips();
 }
+function renderMosaics(word, items){
+  let h = `<div class="res-label">two-word rhymes for “${esc(word)}” — click to insert</div>`;
+  h += chipHtml(items.map(d=>d.word));
+  resultsBox.innerHTML = h;
+  resultsBox.querySelectorAll('.chip').forEach(c=>{
+    c.addEventListener('click', ()=> insertAtCursor(c.dataset.w));
+  });
+}
+
 function renderSections(word, sections){
   if(!sections.length){ resultsBox.innerHTML = `<p class="muted">No synonyms for “${esc(word)}”.</p>`; return; }
   let h = '';

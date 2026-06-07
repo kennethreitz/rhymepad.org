@@ -505,3 +505,30 @@ def test_consonance_is_local():
     filler = "la la la\n" * 7
     text = "I gave a dumber speech\n" + filler + "I always keep my word"
     assert "keep" not in highlighted(text)
+
+
+def test_secondary_pronunciation_stays_local():
+    # predicate's verb reading (pred-i-KATE) must not hand it to the
+    # hook's "eight" far away when the noun rhymes with its neighbor
+    filler = "nothing on this line\n" * 8
+    text = ("Six-foot, seven-foot, eight-foot bunch\n" + filler +
+            "You niggas are gelatin, peanuts to an elephant\n"
+            "I got through that sentence like a subject and a predicate")
+    group_with(text, "gelatin", "elephant", "predicate")
+
+
+# -------------------------------------------------------------- new tools
+
+def test_mosaic_generator():
+    from app import mosaics_for
+    words = {m["word"] for m in mosaics_for("placement", 20)}
+    assert "place meant" in words
+    creation = {m["word"] for m in mosaics_for("creation", 20)}
+    assert "way shun" in creation
+
+
+def test_word_info():
+    from app import word_info
+    info = word_info(word="tonight")
+    assert info["syl"] == 2 and info["stress"] == "01"
+    assert info["rime"] == "AY T"
