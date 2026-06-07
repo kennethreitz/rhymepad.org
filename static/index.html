@@ -278,6 +278,7 @@ Double-click any word to look it up on the right."></textarea>
     <div class="toolbar">
       <button class="btn primary" id="copyBtn">Copy to clipboard</button>
       <button class="btn" id="exportBtn" title="Download this draft as a color-coded PNG">Export image</button>
+      <label class="mtoggle" title="Color-code rhyme families"><input type="checkbox" id="rhymeToggle" checked> rhyme</label>
       <label class="mtoggle" title="Sheet music for your flow — syllable emphasis dots under each word"><input type="checkbox" id="stressToggle"> rhythm</label>
       <label class="mtoggle" title="Underline words that share an initial sound"><input type="checkbox" id="allitToggle"> alliteration</label>
       <div class="scheme-readout" id="schemeReadout"></div>
@@ -349,6 +350,9 @@ stressToggle.addEventListener('change', render);
 const allitToggle = document.getElementById('allitToggle');
 allitToggle.checked = false;
 allitToggle.addEventListener('change', render);
+const rhymeToggle = document.getElementById('rhymeToggle');
+rhymeToggle.checked = true;
+rhymeToggle.addEventListener('change', render);
 const schemeReadout = document.getElementById('schemeReadout');
 const COLORS = 12;
 
@@ -528,7 +532,7 @@ function render(){
       while(cp < n && old[cp] === line[cp]) cp++;
       raw = (tokByLine[i] || []).filter(t=>t.e <= cp);
     }
-    const toks = raw.filter(t=>groupInfo[t.g]);
+    const toks = rhymeToggle.checked ? raw.filter(t=>groupInfo[t.g]) : [];
     const words = toks.filter(t=>!t.ph);
     const phrases = toks.filter(t=>t.ph);
     const als = (allitToggle.checked && fresh) ? (allitByLine[i] || []) : [];
@@ -872,7 +876,7 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
   lines.forEach((line, i)=>{
     const y = PAD + i * LH + LH / 2;
     const fresh = analysis && analysis.lines[i] === line;
-    const toks = (fresh ? (tokByLine[i] || []) : []).filter(t=>groupInfo[t.g]);
+    const toks = (rhymeToggle.checked && fresh ? (tokByLine[i] || []) : []).filter(t=>groupInfo[t.g]);
     const words = toks.filter(t=>!t.ph), phrases = toks.filter(t=>t.ph);
     const cuts = new Set([0, line.length]);
     toks.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
