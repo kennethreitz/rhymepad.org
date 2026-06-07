@@ -578,7 +578,7 @@ async function doLookup(){
         resultsBox.innerHTML = `<p class="muted">No synonyms found for “${esc(word)}”.</p>`;
         return;
       }
-      renderByPos(word, data.words);
+      renderSections(word, data.sections);
     }else{
       if(!data.known){
         resultsBox.innerHTML = `<p class="muted">“${esc(word)}” isn't in the pronunciation dictionary.</p>`;
@@ -644,17 +644,13 @@ function renderChips(label, words){
   resultsBox.innerHTML = `<div class="res-label">${label}</div>` + chipHtml(words.slice(0,50));
   wireChips();
 }
-function renderByPos(word, items){
-  if(!items.length){ resultsBox.innerHTML = `<p class="muted">No synonyms for “${esc(word)}”.</p>`; return; }
-  const byPos = {};
-  items.forEach(d=>{ (byPos[d.pos || 'related'] ||= []).push(d.word); });
-  let h = `<div class="res-label">Synonyms for “${esc(word)}”</div>`;
-  ['noun','verb','adjective','adverb','related'].forEach(pos=>{
-    if(!byPos[pos]) return;
-    h += `<div class="res-label">${pos}s</div>` + chipHtml(byPos[pos]);
-    delete byPos[pos];
+function renderSections(word, sections){
+  if(!sections.length){ resultsBox.innerHTML = `<p class="muted">No synonyms for “${esc(word)}”.</p>`; return; }
+  let h = '';
+  sections.forEach(s=>{
+    h += `<div class="res-label">${esc(s.label)}</div>` +
+         chipHtml(s.words.map(d=>d.word), s.label === 'synonyms' ? '' : 'near');
   });
-  Object.keys(byPos).forEach(pos=>{ h += `<div class="res-label">${esc(pos)}</div>` + chipHtml(byPos[pos]); });
   resultsBox.innerHTML = h;
   wireChips();
 }

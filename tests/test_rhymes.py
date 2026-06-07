@@ -300,10 +300,16 @@ def test_perfect_subgroup_fuses_with_slant_family():
 
 
 def test_lookup_synonyms_wordnet():
-    words = {w["word"] for w in lookup("happy", mode="syn")["words"]}
-    assert "glad" in words
-    big = {w["word"]: w["pos"] for w in lookup("big", mode="syn")["words"]}
-    assert "large" in big and big["large"] == "adjective"
+    data = lookup("happy", mode="syn")
+    flat = {w["word"] for s in data["sections"] for w in s["words"]}
+    assert "glad" in flat
+    labels = [s["label"] for s in data["sections"]]
+    assert "synonyms" in labels and "opposites" in labels
+
+
+def test_lookup_synonyms_lemmatized():
+    data = lookup("keys", mode="syn")  # morphy: keys -> key
+    assert data["known"] is True
 
 
 def test_lookup_synonyms_unknown_word():
@@ -322,3 +328,11 @@ def test_rhyme_mode_includes_near():
     data = lookup("hold", mode="rhyme")
     assert "gold" in {w["word"] for w in data["words"]}
     assert "home" in {w["word"] for w in data["near"]}
+
+
+def test_schwa_phrase_needs_consonant_support():
+    # «sloth hugs» (OW-TH + schwa) must not ride the over/shoulder family
+    # just because the vowels rhyme — door hinge gets in on orange's R
+    text = ("Looming over your shoulder, like a sloth hugs a tree,\n"
+            "Thinking it won't fall, yet there it goes. Damn, it's free.")
+    assert "sloth hugs" not in highlighted(text)

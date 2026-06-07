@@ -183,6 +183,9 @@ def founding_projections(key: str) -> dict[str, str]:
             mk = _multi_key(vowels)
             if mk:
                 out["multi"] = mk
+            mk2 = _m2_key(ph)
+            if mk2:
+                out["multi2"] = mk2
     elif key.startswith("v:"):  # vowel tail
         out["slant"] = key
         mk = _multi_key(key[2:].split())
@@ -190,6 +193,8 @@ def founding_projections(key: str) -> dict[str, str]:
             out["multi"] = mk
     elif key.startswith("m:"):
         out["multi"] = key
+    elif key.startswith("m2:"):
+        out["multi2"] = key
     elif key.startswith("c:"):
         out["vc"] = key
     return out
@@ -263,6 +268,20 @@ def vc_key(word: str) -> str | None:
     return "c:" + key
 
 
+def _m2_key(seq: list[str]) -> str | None:
+    """Vowel + coda consonant + one reduced vowel — the consonant-supported
+    variant of a 2-vowel key. V+schwa alone is too weak for phrases:
+    door hinge shares orange's R, but sloth hugs has nothing of shoulder."""
+    ph = [DIGITS.sub("", p) for p in seq]
+    vowels = [p for p in ph if p in ARPA_VOWELS]
+    if len(vowels) != 2 or vowels[1] not in REDUCED:
+        return None
+    vi = ph.index(vowels[0])
+    if vi + 1 >= len(ph) or ph[vi + 1] in ARPA_VOWELS:
+        return None  # open syllable — no coda to lean on
+    return f"m2:{vowels[0]} {ph[vi + 1]} x"
+
+
 def multi_keys(word: str) -> tuple[str, ...]:
     """Multisyllabic keys across all candidate pronunciations, anchored at
     the last stressed vowel AND the first primary stress — KET-a-mine can
@@ -285,6 +304,9 @@ def multi_keys(word: str) -> tuple[str, ...]:
             k = _multi_key(vs)
             if k:
                 out.append(k)
+            k2 = _m2_key(pl[a:])  # joinable by consonant-supported phrases
+            if k2:
+                out.append(k2)
     return tuple(dict.fromkeys(out))
 
 
@@ -501,7 +523,7 @@ def analyze(draft: Draft):
     # (placement / creation both carry EY AH; orange / door hinge both
     # carry AO + schwa). Single-vowel assonance is too noisy to flag
     # mid-line, so it stays end-of-line only (pass 2).
-    group_by_multi = gmap_for("multi")
+    group_by_multi = {**gmap_for("multi"), **gmap_for("multi2")}
     by_multi = defaultdict(list)
     for t in tokens:
         if id(t) in grouped:
@@ -532,7 +554,12 @@ def analyze(draft: Draft):
         if any(s < p["end"] and p["start"] < e
                for s, e in grouped_spans[p["line"]]):
             continue
-        key = _multi_key(p["vowels"])
+        vs = p["vowels"]
+        if len(vs) >= 3 or (len(vs) == 2 and vs[1] not in REDUCED):
+            key = _multi_key(vs)
+        else:
+            # V+schwa phrases must bring consonant support
+            key = _m2_key(p["rime"].split())
         if key:
             attach_or_collect(p, key, by_multi, group_by_multi)
 
@@ -743,21 +770,61 @@ POS_NAMES = {"n": "noun", "v": "verb", "a": "adjective",
 
 
 def synonyms_for(w: str, limit: int) -> list[dict]:
-    """Sense-grouped synonyms from WordNet, frequency-ranked."""
+    """Word associations from WordNet, in sections: synonyms, opposites,
+    broader terms, and related words. Input is lemmatized first so
+    'keys' and 'feeling' resolve to 'key' and 'feel'."""
     wn = get_wordnet()
-    seen: dict[str, str] = {}
-    for ss in wn.synsets(w):
-        lemmas = list(ss.lemmas())
-        if ss.pos() in ("a", "s"):  # adjectives: pull in the satellites
+    base = w
+    for pos in ("n", "v", "a", "r"):
+        m = wn.morphy(w, pos)
+        if m:
+            base = m
+            break
+
+    sections: dict[str, dict[str, str]] = {
+        "synonyms": {}, "opposites": {}, "broader": {}, "related": {}}
+
+    def add(bucket, lemma, pos):
+        name = lemma.name().replace("_", " ").lower()
+        if name not in (w, base) and re.fullmatch(r"[a-z' -]+", name):
+            sections[bucket].setdefault(name, POS_NAMES.get(pos, pos))
+
+    for ss in wn.synsets(base):
+        pos = ss.pos()
+        for lemma in ss.lemmas():
+            add("synonyms", lemma, pos)
+            for ant in lemma.antonyms():
+                add("opposites", ant, pos)
+            for dr in lemma.derivationally_related_forms():
+                add("related", dr, dr.synset().pos())
+        if pos in ("a", "s"):  # adjectives: the satellite clusters
             for sim in ss.similar_tos():
-                lemmas.extend(sim.lemmas())
-        for lemma in lemmas:
-            name = lemma.name().replace("_", " ").lower()
-            if name != w and re.fullmatch(r"[a-z' -]+", name):
-                seen.setdefault(name, POS_NAMES.get(ss.pos(), ss.pos()))
-    ranked = sorted(seen.items(),
-                    key=lambda kv: (-zipf_frequency(kv[0], "en"), kv[0]))
-    return [{"word": n, "pos": p} for n, p in ranked[:limit]]
+                for lemma in sim.lemmas():
+                    add("related", lemma, pos)
+        for hyper in ss.hypernyms():
+            for lemma in hyper.lemmas():
+                add("broader", lemma, pos)
+        for hypo in ss.hyponyms()[:8]:
+            for lemma in hypo.lemmas():
+                add("related", lemma, pos)
+        for other in ss.also_sees() + ss.attributes():
+            for lemma in other.lemmas():
+                add("related", lemma, other.pos())
+
+    # a word belongs to its strongest section only
+    caps = {"synonyms": 30, "opposites": 10, "broader": 12, "related": 20}
+    taken: set[str] = set()
+    out = []
+    for label in ("synonyms", "opposites", "broader", "related"):
+        items = {n: p for n, p in sections[label].items() if n not in taken}
+        ranked = sorted(items.items(),
+                        key=lambda kv: (-zipf_frequency(kv[0], "en"), kv[0]))
+        ranked = ranked[:caps[label]]
+        taken.update(n for n, _ in ranked)
+        if ranked:
+            out.append({"label": label,
+                        "words": [{"word": n, "pos": p} for n, p in ranked]})
+    return out
 
 
 def _ranked(words, exclude: set[str], limit: int) -> list[dict]:
@@ -781,8 +848,9 @@ def _ranked(words, exclude: set[str], limit: int) -> list[dict]:
 def lookup(word: str, mode: str = "rhyme", limit: int = 60):
     w = word.strip().lower()
     if mode == "syn":
-        words = synonyms_for(w, limit)
-        return {"word": w, "mode": mode, "known": bool(words), "words": words}
+        sections = synonyms_for(w, limit)
+        return {"word": w, "mode": mode, "known": bool(sections),
+                "sections": sections}
     phones = phones_for(w)
     if not phones:
         return {"word": w, "mode": mode, "known": False, "words": []}
