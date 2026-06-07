@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RhymePad — a scratchpad for poets &amp; rappers</title>
-<meta name="description" content="Write lyrics and poems with live phonetic rhyme detection — internal rhymes, multisyllabics, multi-word mosaics — plus rhyme & synonym lookup, beats, and meter check.">
+<meta name="description" content="Write lyrics and poems with live phonetic rhyme detection — internal rhymes, multisyllabics, multi-word mosaics — plus rhyme & synonym lookup, beats, and per-line meter.">
 <meta property="og:title" content="RhymePad">
 <meta property="og:description" content="A scratchpad that color-codes your rhyme schemes as you write. Real phonetic analysis: internal rhymes, slant rhymes, multi-word mosaics. Yes, it knows orange rhymes with door hinge.">
 <meta property="og:type" content="website">
@@ -124,11 +124,6 @@
      only, so the textarea text on top stays crisp and box metrics stay
      identical (no horizontal padding!) */
   .hseg { border-radius: 4px; }
-  .offbeat {
-    text-decoration: underline wavy color-mix(in srgb, var(--r6) 45%, transparent);
-    text-decoration-skip-ink: none;
-    text-underline-offset: 7px;
-  }
   .toolbar {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   }
@@ -151,13 +146,6 @@
   }
   .scheme-readout b { color: var(--accent-2); letter-spacing: 0.15em; }
   .scheme-readout .offline { color: var(--r6); letter-spacing: 0.02em; }
-
-  .mtoggle {
-    display: flex; align-items: center; gap: 6px;
-    color: var(--ink-dim); font-size: 12px; cursor: pointer; user-select: none;
-  }
-  .mtoggle input { accent-color: var(--accent); }
-  .mtoggle:hover { color: var(--ink); }
 
   /* ---- side panel ---- */
   aside {
@@ -271,7 +259,6 @@ Double-click any word to look it up on the right."></textarea>
     <div class="toolbar">
       <button class="btn primary" id="copyBtn">Copy to clipboard</button>
       <button class="btn" id="exportBtn" title="Download this draft as a color-coded PNG">Export image</button>
-      <label class="mtoggle" title="Flag lines that break their stanza's syllable pattern"><input type="checkbox" id="meterToggle"> meter check</label>
       <div class="scheme-readout" id="schemeReadout"></div>
     </div>
   </div>
@@ -535,9 +522,7 @@ function render(){
         h += `<span class="hseg" style="background:color-mix(in srgb, ${color} ${alpha}%, transparent);">${text}</span>`;
       }
     }
-    const m = meterToggle.checked && fresh && analysis.meter
-      ? analysis.meter.find(x=>x.l===i) : null;
-    html += (m && m.off ? `<span class="offbeat">${h}</span>` : h) + '\n';
+    html += h + '\n';
   });
   highlight.innerHTML = html;
   highlight.scrollTop = editor.scrollTop;
@@ -566,7 +551,6 @@ function buildReadout(){
   const m = analysis && analysis.meter ? analysis.meter.find(x=>x.l===ln) : null;
   if(m){
     let p = `${m.syl} syl` + (m.label ? ` · ${m.label}` : '');
-    if(m.off && meterToggle.checked) p += ` <span class="offline">· breaks stanza meter (~${m.target} syl)</span>`;
     parts.push(p);
   }
   const st = caretStanza();
@@ -858,15 +842,6 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
     flash('exportBtn', 'Exported \u2713');
   });
 });
-
-/* ============================================================
-   METER CHECK — toggleable wavy-underline warnings for lines
-   that break their stanza's syllable pattern.
-============================================================ */
-const meterToggle = document.getElementById('meterToggle');
-// a per-session tool: always starts off, never persists
-meterToggle.checked = false;
-meterToggle.addEventListener('change', render);
 
 /* ============================================================
    COPY / CLEAR / SAMPLE
