@@ -878,7 +878,6 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
       x.font = "8px 'Spline Sans Mono', monospace";
       x.textAlign = 'center';
       spans.forEach(s=>{
-        const x0 = PAD + x.measureText(line.slice(0, s.s)).width * 2;
         // measure with the body font for positions
         x.font = font;
         const left = PAD + x.measureText(line.slice(0, s.s)).width;
