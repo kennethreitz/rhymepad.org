@@ -62,6 +62,19 @@
 
   /* ---- editor side ---- */
   .editor-col { display: flex; flex-direction: column; min-height: 0; gap: 10px; }
+  .drafts-bar { display: flex; gap: 6px; overflow-x: auto; flex: none; padding-bottom: 2px; }
+  .dtab {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; padding: 6px 12px;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--ink-dim); cursor: pointer; white-space: nowrap;
+    transition: all .15s; user-select: none;
+  }
+  .dtab:hover { color: var(--ink); }
+  .dtab.active { color: var(--ink); border-color: var(--accent); background: rgba(232,129,74,0.08); }
+  .dtab .x { color: var(--ink-dim); font-size: 13px; line-height: 1; }
+  .dtab .x:hover { color: var(--r6); }
+  .dtab.new { color: var(--accent); font-weight: 600; }
   .editor-shell {
     position: relative;
     flex: 1;
@@ -249,6 +262,7 @@
 
   <!-- EDITOR -->
   <div class="editor-col">
+    <div class="drafts-bar" id="draftsBar"></div>
     <div class="editor-shell">
       <div id="highlight"></div>
       <textarea id="editor" spellcheck="false" placeholder="Start writing. Leave a blank line between stanzas.
@@ -342,12 +356,103 @@ function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout
 let analysis = null;      // last server response
 let backendOk = true;
 
-/* ---------- draft persistence — nothing gets lost on a stray refresh ---------- */
-const DRAFT_KEY = 'rhymepad.draft';
-editor.value = localStorage.getItem(DRAFT_KEY) || '';
-function persist(){
-  try{ localStorage.setItem(DRAFT_KEY, editor.value); }catch(e){ /* storage full/blocked */ }
+/* ---------- drafts — multiple docs in localStorage, tabbed ---------- */
+const DOCS_KEY = 'rhymepad.docs';
+const docKey = id => 'rhymepad.doc.' + id;
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+function loadDocs(){
+  try{
+    const s = JSON.parse(localStorage.getItem(DOCS_KEY));
+    if(s && s.docs && s.docs.length && s.docs.some(d=>d.id===s.current)) return s;
+  }catch(e){}
+  // migrate the single-draft era (or first visit)
+  const id = newId();
+  const text = localStorage.getItem('rhymepad.draft') || '';
+  localStorage.setItem(docKey(id), text);
+  const s = {docs: [{id, title: titleOf(text)}], current: id};
+  localStorage.setItem(DOCS_KEY, JSON.stringify(s));
+  return s;
 }
+function titleOf(text){
+  const l = (text || '').split('\n').find(l=>l.trim());
+  if(!l) return 'Untitled';
+  const t = l.trim();
+  return t.length > 26 ? t.slice(0, 25) + '…' : t;
+}
+function saveDocs(){
+  try{ localStorage.setItem(DOCS_KEY, JSON.stringify(docsState)); }catch(e){}
+}
+let docsState = loadDocs();
+editor.value = localStorage.getItem(docKey(docsState.current)) || '';
+
+function persist(){
+  try{
+    localStorage.setItem(docKey(docsState.current), editor.value);
+    const doc = docsState.docs.find(d=>d.id===docsState.current);
+    const title = titleOf(editor.value);
+    if(doc && doc.title !== title){
+      doc.title = title;
+      const el = draftsBar.querySelector('.dtab.active .dtitle');
+      if(el) el.textContent = title;
+    }
+    saveDocs();
+  }catch(e){ /* storage full/blocked */ }
+}
+
+const draftsBar = document.getElementById('draftsBar');
+function renderTabs(){
+  draftsBar.innerHTML = '';
+  docsState.docs.forEach(doc=>{
+    const tab = document.createElement('div');
+    tab.className = 'dtab' + (doc.id === docsState.current ? ' active' : '');
+    const title = document.createElement('span');
+    title.className = 'dtitle';
+    title.textContent = doc.title || 'Untitled';
+    tab.appendChild(title);
+    if(doc.id === docsState.current && docsState.docs.length > 1){
+      const x = document.createElement('span');
+      x.className = 'x'; x.textContent = '×'; x.title = 'Delete this draft';
+      x.addEventListener('click', e=>{ e.stopPropagation(); deleteDoc(doc.id); });
+      tab.appendChild(x);
+    }
+    tab.addEventListener('click', ()=>{ if(doc.id !== docsState.current) openDoc(doc.id); });
+    draftsBar.appendChild(tab);
+  });
+  const plus = document.createElement('div');
+  plus.className = 'dtab new'; plus.textContent = '+'; plus.title = 'New draft';
+  plus.addEventListener('click', newDoc);
+  draftsBar.appendChild(plus);
+}
+function openDoc(id){
+  docsState.current = id;
+  saveDocs();
+  editor.value = localStorage.getItem(docKey(id)) || '';
+  analysis = null;
+  renderTabs();
+  render(); analyze(); editor.focus();
+}
+function newDoc(){
+  const id = newId();
+  docsState.docs.push({id, title: 'Untitled'});
+  localStorage.setItem(docKey(id), '');
+  openDoc(id);
+}
+function deleteDoc(id){
+  const doc = docsState.docs.find(d=>d.id===id);
+  const text = localStorage.getItem(docKey(id)) || '';
+  if(text.trim() && !confirm(`Delete “${doc.title}”?`)) return;
+  try{ if(text.trim()) localStorage.setItem('rhymepad.trash', text); }catch(e){}
+  localStorage.removeItem(docKey(id));
+  docsState.docs = docsState.docs.filter(d=>d.id!==id);
+  if(!docsState.docs.length){
+    const nid = newId();
+    docsState.docs = [{id: nid, title: 'Untitled'}];
+    localStorage.setItem(docKey(nid), '');
+  }
+  openDoc(docsState.docs[0].id);
+}
+renderTabs();
 
 async function analyze(){
   const text = editor.value;
@@ -614,7 +719,7 @@ function flash(id,msg){
 }
 document.getElementById('clearBtn').addEventListener('click', ()=>{
   if(editor.value.trim()){
-    try{ localStorage.setItem(DRAFT_KEY + '.backup', editor.value); }catch(e){}
+    try{ localStorage.setItem('rhymepad.trash', editor.value); }catch(e){}
   }
   editor.value=''; analysis=null; render(); analyze(); editor.focus();
 });
