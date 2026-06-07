@@ -188,7 +188,6 @@
   #histBar { color: var(--ink-dim); font-size: 12px; margin: 8px 2px 0; min-height: 0; }
   #histBar .hist { cursor: pointer; }
   #histBar .hist:hover { color: var(--accent); }
-  .more { color: var(--accent); cursor: pointer; font-size: 11px; letter-spacing: 0; text-transform: lowercase; }
   .res-label.sub { color: #6a5f52; margin: 8px 0 2px; }
   .lookup-row input {
     flex: 1; font-family: inherit; font-size: 14px;
@@ -773,7 +772,7 @@ async function doLookup(){
       el.textContent = 'not in the pronunciation dictionary';
     }
   }
-  entry = {word, rhyme, syn, desc, expanded: {}};
+  entry = {word, rhyme, syn, desc};
   paintSections();
 }
 
@@ -808,37 +807,26 @@ function chipHtml(items, cls){
     }).join('') + '</div>';
 }
 
-function secLabel(id, label, truncated){
-  return `<div class="res-label">${label}` +
-    (truncated && !entry.expanded[id] ? ` <span class="more" data-sec="${id}">more…</span>` : '') +
-    '</div>';
-}
-
 function paintSections(){
   const e = entry;
   if(!e) return;
   let h = '';
   if(e.desc && e.desc.length){
-    const items = e.desc.map(d=>d.word);
-    const lim = e.expanded.desc ? items.length : 12;
-    h += secLabel('desc', 'describes', items.length > 12) + chipHtml(items.slice(0, lim));
+    h += `<div class="res-label">describes</div>` + chipHtml(e.desc.map(d=>d.word));
   }
   if(e.rhyme && e.rhyme.known && (e.rhyme.words.length || (e.rhyme.near || []).length)){
-    const lim = e.expanded.rhyme ? 999 : 8;
     const bySyl = {};
     e.rhyme.words.forEach(d=>{ (bySyl[d.syl || 0] ||= []).push(d); });
-    const truncated = e.rhyme.words.length > 16 || (e.rhyme.near || []).length > 8;
     const onWord = e.rhyme.rhyme_on ? ` — on “${esc(e.rhyme.rhyme_on)}”` : '';
-    h += secLabel('rhyme', 'rhymes' + onWord, truncated);
+    h += `<div class="res-label">rhymes${onWord}</div>`;
     Object.keys(bySyl).sort((a,b)=>a-b).forEach(k=>{
-      h += `<div class="res-label sub">${k == 0 ? '?' : k} syl</div>` + chipHtml(bySyl[k].slice(0, lim));
+      h += `<div class="res-label sub">${k == 0 ? '?' : k} syl</div>` + chipHtml(bySyl[k]);
     });
-    const near = (e.rhyme.near || []).slice(0, e.expanded.rhyme ? 999 : 8);
+    const near = e.rhyme.near || [];
     if(near.length) h += `<div class="res-label sub">near</div>` + chipHtml(near, 'near');
   }
   if(e.syn && e.syn.known && e.syn.sections.length){
-    // bottom section: always fully expanded — nothing below to crowd
-    h += secLabel('syn', 'synonyms', false);
+    h += `<div class="res-label">synonyms</div>`;
     e.syn.sections.forEach(s=>{
       if(s.label !== 'synonyms') h += `<div class="res-label sub">${esc(s.label)}</div>`;
       h += chipHtml(s.words.map(d=>d.word), s.label === 'synonyms' ? '' : 'near');
@@ -847,8 +835,6 @@ function paintSections(){
   resultsBox.innerHTML = h || `<p class="muted">nothing found for “${esc(e.word)}”.</p>`;
   resultsBox.querySelectorAll('.chip').forEach(c=>
     c.addEventListener('click', ()=> lookupFor(c.dataset.w)));
-  resultsBox.querySelectorAll('.more').forEach(m=>
-    m.addEventListener('click', ()=>{ entry.expanded[m.dataset.sec] = true; paintSections(); }));
 }
 
 /* ============================================================
@@ -1014,15 +1000,22 @@ editor.addEventListener('paste', e=>{
   const cleaned = cleanPaste(text);
   if(cleaned === text) return;
   e.preventDefault();
-  editor.setRangeText(cleaned, editor.selectionStart, editor.selectionEnd, 'end');
+  // execCommand keeps the native undo stack intact (setRangeText doesn't)
+  editor.focus();
+  if(!document.execCommand('insertText', false, cleaned)){
+    editor.setRangeText(cleaned, editor.selectionStart, editor.selectionEnd, 'end');
+  }
   render(); analyzeSoon();
 });
 lookupInput.addEventListener('paste', e=>{
   const text = e.clipboardData && e.clipboardData.getData('text/plain');
   if(text && /[\u2018\u2019]/.test(text)){
     e.preventDefault();
-    lookupInput.setRangeText(text.replace(/[\u2018\u2019]/g, "'"),
-      lookupInput.selectionStart, lookupInput.selectionEnd, 'end');
+    lookupInput.focus();
+    const fixed = text.replace(/[\u2018\u2019]/g, "'");
+    if(!document.execCommand('insertText', false, fixed)){
+      lookupInput.setRangeText(fixed, lookupInput.selectionStart, lookupInput.selectionEnd, 'end');
+    }
   }
 });
 
