@@ -251,7 +251,6 @@ Double-click any word to look it up on the right."></textarea>
     </div>
     <div class="toolbar">
       <button class="btn primary" id="copyBtn">Copy to clipboard</button>
-      <button class="btn" id="clearBtn">Clear</button>
       <button class="btn" id="sampleBtn">Load sample</button>
       <label class="mtoggle"><input type="checkbox" id="meterToggle"> meter check</label>
       <div class="scheme-readout" id="schemeReadout"></div>
@@ -702,12 +701,6 @@ function flash(id,msg){
   const b=document.getElementById(id); const o=b.textContent; b.textContent=msg;
   setTimeout(()=>b.textContent=o,1100);
 }
-document.getElementById('clearBtn').addEventListener('click', ()=>{
-  if(editor.value.trim()){
-    try{ localStorage.setItem('rhymepad.trash', editor.value); }catch(e){}
-  }
-  editor.value=''; analysis=null; render(); analyze(); editor.focus();
-});
 document.getElementById('sampleBtn').addEventListener('click', ()=>{
   editor.value =
 `I keep the cadence tucked beneath my tongue tonight
