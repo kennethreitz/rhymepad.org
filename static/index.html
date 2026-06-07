@@ -98,13 +98,16 @@
     margin: 0; border: 0;
     padding: 22px 24px;
     font: inherit;
-    line-height: 2.35;
+    line-height: 1.9;
     white-space: pre-wrap;
     word-wrap: break-word;
     overflow-y: auto;
     letter-spacing: 0;
     tab-size: 4;
   }
+  .editor-shell.rhythm #highlight,
+  .editor-shell.rhythm #stresslayer,
+  .editor-shell.rhythm #editor { line-height: 2.35; }
   #highlight {
     pointer-events: none;
     color: transparent;
@@ -347,7 +350,10 @@ const highlight = document.getElementById('highlight');
 const stresslayer = document.getElementById('stresslayer');
 const stressToggle = document.getElementById('stressToggle');
 stressToggle.checked = false;
-stressToggle.addEventListener('change', render);
+stressToggle.addEventListener('change', ()=>{
+  document.querySelector('.editor-shell').classList.toggle('rhythm', stressToggle.checked);
+  render();
+});
 const allitToggle = document.getElementById('allitToggle');
 allitToggle.checked = false;
 allitToggle.addEventListener('change', render);
