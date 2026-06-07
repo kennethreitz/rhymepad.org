@@ -225,9 +225,6 @@
   .tempo-row input[type=range] { flex:1; accent-color: var(--accent); }
   .tempo-val { font-variant-numeric: tabular-nums; color: var(--accent-2); min-width: 64px; text-align:right; font-size:13px;}
   .beat-controls { display:flex; gap:8px; margin-top:12px; }
-  .legend { margin-top: 14px; }
-  .legend-item { display:flex; align-items:center; gap:8px; font-size:12px; margin:5px 0; color: var(--ink-dim); }
-  .swatch { width:14px; height:14px; border-radius:4px; }
   footer { grid-column: 1 / -1; }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-thumb { background: #3a342d; border-radius: 6px; border: 2px solid var(--panel); }
@@ -279,10 +276,6 @@ Double-click any word to look it up on the right."></textarea>
       <div id="defBox"></div>
       <div id="lookupResults">
         <p class="muted">Type a word and hit Go for rhymes. Double-click a word in your draft for its definition. Click any result chip for its definition too.</p>
-      </div>
-      <div class="legend">
-        <div class="res-label">Current stanza</div>
-        <div id="legendBox"><p class="muted">No rhymes detected yet.</p></div>
       </div>
     </div>
 
@@ -491,7 +484,6 @@ function render(){
   highlight.scrollTop = editor.scrollTop;
   highlight.scrollLeft = editor.scrollLeft;
   buildReadout();
-  buildLegend();
 }
 
 function caretLine(){
@@ -523,23 +515,10 @@ function buildReadout(){
   schemeReadout.innerHTML = parts.join(' &nbsp;&nbsp; ');
 }
 
-function buildLegend(){
-  const box = document.getElementById('legendBox');
-  const st = caretStanza();
-  if(!st || !st.legend.length){ box.innerHTML = '<p class="muted">No rhymes detected yet.</p>'; return; }
-  box.innerHTML = st.legend.map(l=>{
-    const sw = l.color === null
-      ? `<span class="swatch" style="background:#3a342d"></span>`
-      : `<span class="swatch" style="background:var(--r${l.color % COLORS})"></span>`;
-    const note = l.color === null ? ' — no rhyme' : (l.slant ? ' — slant' : '');
-    return `<div class="legend-item">${sw} ending “${l.ch}”${note}</div>`;
-  }).join('');
-}
-
 editor.addEventListener('input', ()=>{ render(); analyzeSoon(); });
 editor.addEventListener('scroll', ()=>{ highlight.scrollTop = editor.scrollTop; highlight.scrollLeft = editor.scrollLeft; });
-editor.addEventListener('keyup', ()=>{ buildReadout(); buildLegend(); });
-editor.addEventListener('click', ()=>{ buildReadout(); buildLegend(); });
+editor.addEventListener('keyup', buildReadout);
+editor.addEventListener('click', buildReadout);
 
 /* ---------- double-click a word -> look it up ---------- */
 editor.addEventListener('dblclick', ()=>{
