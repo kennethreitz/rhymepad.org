@@ -333,6 +333,16 @@ def multi_keys(word: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(out))
 
 
+def weak_end_key(word: str) -> str | None:
+    """The bare final vowel, stress be damned — at line ends poets rhyme
+    the weak syllable (infancy / see, eternity / be)."""
+    ph = phones_for(word)
+    if not ph:
+        return None
+    vowels = _all_vowels(ph)
+    return ("v:" + vowels[-1]) if vowels else None
+
+
 def slant_key(word: str) -> str | None:
     phones = phones_for(word)
     if phones:
@@ -611,10 +621,23 @@ def analyze(draft: Draft):
     by_slant = defaultdict(list)
     for t in tokens:
         if t["is_end"] and id(t) not in grouped:
-            key = slant_key(t["word"])
-            if key:
-                attach_or_collect(t, key, by_slant, group_by_slant)
-    for (sid, key), toks in by_slant.items():
+            keys = [slant_key(t["word"])]
+            wk = weak_end_key(t["word"])
+            if wk and wk not in keys:
+                keys.append(wk)  # feminine endings: infancy rhymes see
+            for key in filter(None, keys):
+                gi = group_by_slant.get((t["sid"], key))
+                if gi is not None:
+                    raw_groups[gi]["toks"].append(t)
+                    t["slant"] = True
+                    grouped.add(id(t))
+                    break
+            else:
+                for key in filter(None, keys):
+                    by_slant[(t["sid"], key)].append(t)
+    for (sid, key), toks in sorted(by_slant.items(),
+                                   key=lambda kv: (-len(kv[1]), kv[0][1])):
+        toks = [t for t in toks if id(t) not in grouped]
         if len(toks) >= 2 and len({t["word"].lower() for t in toks}) >= 2:
             raw_groups.append({"toks": toks, "slant": True, "key": key})
             grouped.update(id(t) for t in toks)

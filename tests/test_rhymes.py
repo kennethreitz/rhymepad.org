@@ -420,3 +420,13 @@ def test_analyze_rejects_oversized_drafts():
     from fastapi import HTTPException
     with _pytest.raises(HTTPException):
         analyze(Draft(text="a" * 200_000))
+
+
+def test_weak_ending_rhymes_at_line_end():
+    # Lateralus: stress sits on IN-fancy, but the weak final syllable
+    # carries the rhyme at the line end
+    text = ("All I see\n"
+            "In my infancy\n"
+            "Red and yellow then came to be\n"
+            "Reaching out to me")
+    group_with(text, "see", "infancy", "be", "me")
