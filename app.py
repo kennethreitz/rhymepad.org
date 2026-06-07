@@ -32,6 +32,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     get_slant_index()
+    get_multi_indexes()
     yield
 
 
@@ -901,25 +902,63 @@ def analyze(draft: Draft):
     # (shoulder/older/colder) shouldn't split colors with the slant family
     # it lives inside (soldier/holster/coaster). Perfect members keep the
     # strong styling; the slant side keeps per-token slant marks.
-    by_family: dict[str, dict] = {}
-    fused: list[dict] = []
-    for g in raw_groups:
-        mk = founding_projections(g["key"]).get("multi")
-        tgt = by_family.get(mk) if mk else None
-        if tgt is None:
-            if mk:
-                by_family[mk] = g
-            fused.append(g)
+    mkeys = [founding_projections(g["key"]).get("multi") for g in raw_groups]
+    mparent = list(range(len(raw_groups)))
+
+    def mfind(i):
+        while mparent[i] != i:
+            mparent[i] = mparent[mparent[i]]
+            i = mparent[i]
+        return i
+
+    def _tail_of(short, long):
+        return len(short) <= len(long) and long[len(long) - len(short):] == short
+
+    def _sig(key):
+        vs = key[2:].split()
+        while vs and vs[-1] == "x":
+            vs.pop()  # trailing schwas fall off the beat on both sides
+        return vs
+
+    for ai in range(len(raw_groups)):
+        if not mkeys[ai]:
             continue
-        if g["slant"]:
-            for t in g["toks"]:
-                t["slant"] = True
-        elif tgt["slant"]:
-            for t in tgt["toks"]:
-                t["slant"] = True
-            tgt["slant"] = False
-            tgt["key"] = g["key"]
-        tgt["toks"].extend(g["toks"])
+        va = _sig(mkeys[ai])
+        if not va:
+            continue
+        for bi in range(ai + 1, len(raw_groups)):
+            if not mkeys[bi]:
+                continue
+            vb = _sig(mkeys[bi])
+            if not vb:
+                continue
+            # equal keys fuse; so do END-ALIGNED containments — a family
+            # rhyming on AA-x is the tail of one rhyming on AE-AA-x
+            # (back pocket / rap profit / office), the longer just
+            # carries lead syllables
+            if va == vb or _tail_of(va, vb) or _tail_of(vb, va):
+                mparent[mfind(ai)] = mfind(bi)
+
+    mclusters = defaultdict(list)
+    for gi in range(len(raw_groups)):
+        mclusters[mfind(gi)].append(gi)
+    fused: list[dict] = []
+    for members in mclusters.values():
+        if len(members) == 1:
+            fused.append(raw_groups[members[0]])
+            continue
+        hub = max(members, key=lambda gi: (not raw_groups[gi]["slant"],
+                                           len(raw_groups[gi]["toks"])))
+        core = raw_groups[hub]
+        for gi in members:
+            if gi == hub:
+                continue
+            g = raw_groups[gi]
+            if g["slant"]:
+                for t in g["toks"]:
+                    t["slant"] = True
+            core["toks"].extend(g["toks"])
+        fused.append(core)
     raw_groups = fused
 
     # fuse single-vowel perfect families whose coda classes NEST — the
@@ -1029,12 +1068,17 @@ def analyze(draft: Draft):
             t["gid"] = gid
         groups_out.append({"id": gid, "color": gid % COLORS, "slant": g["slant"]})
 
-    # stanza rhyme schemes from line-ending groups
-    # (a grouped end word wins over a grouped end phrase)
-    end_gid: dict[int, int] = {}
+    # stanza rhyme schemes from line-ending groups: the token covering
+    # the most of the line's tail owns the slot — Em rhymes "-cock it",
+    # not "it"
+    end_best: dict[int, tuple[int, int]] = {}
     for t in [*tokens, *phrases]:
         if t["is_end"] and t["gid"] is not None:
-            end_gid.setdefault(t["line"], t["gid"])
+            span = t["end"] - t["start"]
+            cur = end_best.get(t["line"])
+            if cur is None or span > cur[0]:
+                end_best[t["line"]] = (span, t["gid"])
+    end_gid = {ln: gid for ln, (sp, gid) in end_best.items()}
     last_tok = {}
     for t in tokens:
         if t["is_end"]:
@@ -1340,6 +1384,109 @@ def word_info(word: str):
             "zipf": round(zipf_frequency(w, "en"), 1)}
 
 
+_multi_left: dict[str, list[str]] | None = None
+_multi_right: dict[str, list[str]] | None = None
+
+
+def _squeeze_vs(vs: list[str]) -> str:
+    """Vowel skeleton: first vowel exact, later reduced vowels merge to x
+    — the same equivalence the multi detection passes use."""
+    return " ".join([vs[0]] + ["x" if v in REDUCED else v for v in vs[1:]])
+
+
+def get_multi_indexes():
+    """tail-skeleton -> words (left halves) and full-skeleton -> words
+    (right halves / whole-word matches), built once."""
+    global _multi_left, _multi_right
+    if _multi_left is None:
+        pronouncing.init_cmu()
+        left: dict[str, list[str]] = defaultdict(list)
+        right: dict[str, list[str]] = defaultdict(list)
+        seen = set()
+        for w, phones in pronouncing.pronunciations:
+            if (w in seen or not w.isalpha() or len(w) < 3
+                    or zipf_frequency(w, "en") < 3.0):
+                continue
+            seen.add(w)
+            ph = _norm_r(phones)
+            tail = _tail_vowels(ph)
+            if tail:
+                left[_squeeze_vs(tail)].append(w)
+            full = _all_vowels(ph)
+            stressed = any(p[-1] in "12" for p in ph.split())
+            if full and stressed:
+                right[_squeeze_vs(full)].append(w)
+        _multi_left, _multi_right = left, right
+    return _multi_left, _multi_right
+
+
+def target_skeleton(w: str) -> list[str] | None:
+    """Vowel run from the first primary stress — where a rap multi
+    anchors (e-LE-va-tor reads from its EH)."""
+    if " " in w:
+        parts = w.split()
+        pa = phones_for(parts[0])
+        rest = [phones_for(p) for p in parts[1:]]
+        if not pa or not all(rest):
+            return None
+        vs = _tail_vowels(pa)
+        for ph in rest:
+            vs += _all_vowels(ph)
+        return vs if len(vs) >= 2 else None
+    ph = phones_for(w)
+    if not ph:
+        return None
+    pl = ph.split()
+    vi = next((i for i, p in enumerate(pl) if p[-1] == "1"),
+              next((i for i, p in enumerate(pl) if p[-1].isdigit()), None))
+    if vi is None:
+        return None
+    vs = [DIGITS.sub("", p) for p in pl[vi:] if p[-1].isdigit()]
+    return vs if len(vs) >= 2 else None
+
+
+def multis_for(w: str, exclude: set, limit: int = 14) -> list[str]:
+    """Multisyllabic rhymes: single words and two-word combos whose
+    vowel skeleton matches the target's (elevator -> hella paper)."""
+    vs = target_skeleton(w)
+    if not vs:
+        return []
+    skel = _squeeze_vs(vs)
+    left, right = get_multi_indexes()
+    avoid = set(exclude) | set(w.split()) | {w}
+    scored: list[tuple[float, str]] = []
+    for cand in right.get(skel, []):
+        if cand not in avoid:
+            scored.append((zipf_frequency(cand, "en"), cand))
+    parts = skel.split()
+    for i in range(1, len(parts)):
+        lk, rk = " ".join(parts[:i]), " ".join(parts[i:])
+        if not any(v != "x" for v in parts[i:]):
+            continue  # the right half must carry a full vowel
+        lefts = sorted((w2 for w2 in left.get(lk, [])
+                        if w2 not in STOPWORDS and w2 not in avoid),
+                       key=lambda w2: -zipf_frequency(w2, "en"))[:8]
+        rights = sorted((w2 for w2 in right.get(rk, [])
+                         if w2 not in STOPWORDS and w2 not in avoid),
+                        key=lambda w2: -zipf_frequency(w2, "en"))[:8]
+        for a in lefts:
+            za = min(zipf_frequency(a, "en"), 5.0)
+            for b in rights:
+                if b == a:
+                    continue
+                scored.append((za + min(zipf_frequency(b, "en"), 5.0) - 4.0,
+                               f"{a} {b}"))
+    scored.sort(key=lambda t: (-t[0], -len(t[1]), t[1]))
+    out, seen = [], set()
+    for _, c in scored:
+        if c not in seen:
+            seen.add(c)
+            out.append(c)
+        if len(out) >= limit:
+            break
+    return out
+
+
 @app.get("/api/lookup")
 def lookup(word: str, mode: str = "rhyme", limit: int = 60):
     w = word.strip().lower()[:64]
@@ -1361,11 +1508,13 @@ def lookup(word: str, mode: str = "rhyme", limit: int = 60):
     if mode == "near":
         words = _ranked(near_cands, {w}, limit)
         return {"word": w, "mode": mode, "known": True, "words": words}
-    # rhyme mode carries both: perfect in "words", slant in "near"
+    # rhyme mode carries it all: perfect, slant, and multis
     words = _ranked(perfect, {w}, limit)
     near = _ranked(near_cands, {w}, limit // 2)
+    target = word.strip().lower()[:64] if rhyme_on else w
+    multis = multis_for(target, perfect)
     return {"word": w, "mode": mode, "known": True, "words": words,
-            "near": near, "rhyme_on": rhyme_on}
+            "near": near, "rhyme_on": rhyme_on, "multis": multis}
 
 
 app.mount("/", StaticFiles(directory=Path(__file__).parent / "static",

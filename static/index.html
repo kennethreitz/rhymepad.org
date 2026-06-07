@@ -114,6 +114,11 @@
     z-index: 1;
   }
   #highlight .anno { color: #6a5f52; }
+  .sylcount {
+    position: absolute; right: 9px;
+    font-size: 10px; line-height: 1.6; color: #5d5347;
+    pointer-events: none;
+  }
   #editor::selection { background: rgba(232,129,74,0.22); color: transparent; }
   #stresslayer {
     pointer-events: none;
@@ -289,6 +294,7 @@ Double-click any word to look it up on the right."></textarea>
       <label class="mtoggle" title="Color-code rhyme families"><input type="checkbox" id="rhymeToggle" checked> rhyme</label>
       <label class="mtoggle" title="Underline words that share an initial sound"><input type="checkbox" id="allitToggle"> alliteration</label>
       <label class="mtoggle" title="Sheet music for your flow — syllable emphasis dots under each word"><input type="checkbox" id="stressToggle"> rhythm</label>
+      <label class="mtoggle" title="Syllables per line, at the right edge"><input type="checkbox" id="countsToggle"> counts</label>
       <div class="scheme-readout" id="schemeReadout"></div>
     </div>
   </div>
@@ -361,6 +367,9 @@ allitToggle.addEventListener('change', render);
 const rhymeToggle = document.getElementById('rhymeToggle');
 rhymeToggle.checked = true;
 rhymeToggle.addEventListener('change', render);
+const countsToggle = document.getElementById('countsToggle');
+countsToggle.checked = false;
+countsToggle.addEventListener('change', render);
 const schemeReadout = document.getElementById('schemeReadout');
 const COLORS = 12;
 
@@ -579,9 +588,11 @@ function render(){
         h += `<span class="hseg" style="${style}">${text}</span>`;
       }
     }
-    html += (/^\s*[#([]/.test(line) ? `<span class="anno">${h}</span>` : h) + '\n';
+    const lcls = 'lmark' + (/^\s*[#([]/.test(line) ? ' anno' : '');
+    html += (line ? `<span class="${lcls}" data-l="${i}">${h}</span>` : '') + '\n';
   });
   highlight.innerHTML = html;
+  renderCounts(lines);
   renderStress(lines);
   highlight.scrollTop = editor.scrollTop;
   highlight.scrollLeft = editor.scrollLeft;
@@ -606,6 +617,21 @@ function cadenceColors(){
     if(lns.length >= 2){ lns.forEach(l=>{ map[l] = fid % COLORS; }); fid++; }
   });
   return map;
+}
+
+function renderCounts(lines){
+  highlight.querySelectorAll('.sylcount').forEach(el=>el.remove());
+  if(!countsToggle.checked || !analysis || !analysis.meter) return;
+  analysis.meter.forEach(m=>{
+    if(analysis.lines[m.l] !== lines[m.l]) return;  // line being edited
+    const mark = highlight.querySelector(`.lmark[data-l="${m.l}"]`);
+    if(!mark) return;
+    const d = document.createElement('div');
+    d.className = 'sylcount';
+    d.textContent = m.syl;
+    d.style.top = (mark.offsetTop + 5) + 'px';
+    highlight.appendChild(d);
+  });
 }
 
 function renderStress(lines){
@@ -826,6 +852,8 @@ function paintSections(){
     });
     const near = e.rhyme.near || [];
     if(near.length) h += `<div class="res-label sub">near</div>` + chipHtml(near, 'near');
+    const multis = e.rhyme.multis || [];
+    if(multis.length) h += `<div class="res-label sub">multis</div>` + chipHtml(multis);
   }
   if(e.syn && e.syn.known && e.syn.sections.length){
     h += `<div class="res-label">synonyms</div>`;
@@ -857,7 +885,7 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
 
   const probe = document.createElement('canvas').getContext('2d');
   probe.font = font;
-  const w = Math.ceil(Math.max(220, ...lines.map(l=>probe.measureText(l).width)) + PAD * 2);
+  const w = Math.ceil(Math.max(220, ...lines.map(l=>probe.measureText(l).width)) + PAD * 2 + (countsToggle.checked ? 28 : 0));
   const h = Math.ceil(lines.length * LH + PAD * 2 + 18);
   const canvas = document.createElement('canvas');
   canvas.width = w * S; canvas.height = h * S;
@@ -906,6 +934,17 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
     }
     x.fillStyle = /^\s*[#([]/.test(line) ? '#6a5f52' : ink;
     x.fillText(line, PAD, y);
+    if(countsToggle.checked && fresh && analysis.meter){
+      const cm = analysis.meter.find(mm=>mm.l===i);
+      if(cm){
+        x.font = "10px 'Spline Sans Mono', monospace";
+        x.textAlign = 'right';
+        x.fillStyle = '#5d5347';
+        x.fillText(String(cm.syl), w - 10, y);
+        x.textAlign = 'left';
+        x.font = font;
+      }
+    }
     if(rhythm && fresh){
       const spans = (analysis.stress.filter(s=>s.l===i)).sort((a,b)=>a.s-b.s);
       x.font = "8px 'Spline Sans Mono', monospace";

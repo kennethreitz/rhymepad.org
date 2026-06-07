@@ -642,3 +642,31 @@ def test_end_dominated_vowel_families_fuse():
             "The top is not enough\n"
             "No choice, sellin' drugs")
     group_with(text, "love", "blood", "thugs", "mud", "enough", "drugs")
+
+
+def test_em_back_pocket_quintet_is_one_family():
+    # AE-AA mosaics, plain AA endings, and IH-x-AA triples all share the
+    # vowel tail — suffix fusion reads them as Em wrote them: one chain
+    text = ("got a laptop in my back pocket\n"
+            "My pen'll go off when I half-cock it\n"
+            "Got a fat knot from that rap profit\n"
+            "Made a livin' and a killin' off it\n"
+            "Ever since Bill Clinton was still in office")
+    group_with(text, "back pocket", "rap profit", "off it",
+               "still in office", "laptop", "pocket", "profit", "office")
+    assert scheme(text) == "aaaaa"
+
+
+# ------------------------------------------------------------------ multis
+
+def test_multis_generator():
+    from app import multis_for
+    ch = multis_for("charisma", set())
+    assert "little" in ch  # IH-x skeleton, not a perfect rhyme
+    el = multis_for("elevator", set())
+    assert any(" " in m for m in el)  # two-word combos exist
+
+
+def test_multis_in_lookup_response():
+    data = lookup("placement", mode="rhyme")
+    assert data["multis"] and "basement" not in data["multis"]  # perfects excluded
