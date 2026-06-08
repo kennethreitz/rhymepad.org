@@ -350,6 +350,15 @@ def _final_coda_tag(pl: list[str]) -> str:
 WEAK_MK = re.compile(r"^m:[A-Z]+ x$")
 
 
+def _coda_nest(ta: str, tb: str) -> bool:
+    if ta == tb:
+        return True
+    if ta == "." or tb == ".":
+        return False
+    return (ta.startswith(tb) or tb.startswith(ta)
+            or ta.endswith(tb) or tb.endswith(ta))
+
+
 def multi_keys(word: str) -> tuple[str, ...]:
     """Multisyllabic keys across all candidate pronunciations, anchored at
     the last stressed vowel AND the first primary stress — KET-a-mine can
@@ -757,14 +766,28 @@ def analyze(draft: Draft):
         if not t["is_end"] and (w in STOPWORDS or w in refrain or len(w) < 2):
             continue
         keys = multi_keys(t["word"])
+        t_tag = _final_coda_tag(phones_for(t["word"]).split()) \
+            if phones_for(t["word"]) else "."
+        joined = False
         for key in keys:  # join an existing family if any anchor fits
             gi = group_by_multi.get((t["sid"], key))
-            if gi is not None:
-                raw_groups[gi]["toks"].append(t)
-                t["slant"] = True
-                grouped.add(id(t))
-                break
-        else:
+            if gi is None:
+                continue
+            # a bare V-x key is too weak to attach on alone: the token's
+            # coda class must nest with the group's (garbage JH / dollar
+            # R don't, even though both are AA-x)
+            if WEAK_MK.match(key):
+                gtags = {_final_coda_tag(phones_for(m["word"]).split())
+                         for m in raw_groups[gi]["toks"]
+                         if " " not in m["word"] and phones_for(m["word"])}
+                if gtags and not any(_coda_nest(t_tag, gt) for gt in gtags):
+                    continue
+            raw_groups[gi]["toks"].append(t)
+            t["slant"] = True
+            grouped.add(id(t))
+            joined = True
+            break
+        if not joined:
             for key in keys:
                 by_multi[(t["sid"], key)].append(t)
 

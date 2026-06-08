@@ -250,7 +250,8 @@ def test_layered_phrase_rides_second_group():
             "fill the cup up to the brim\n"
             "Maybe I need to stir up shit\n"
             "the burden is mine")
-    syrup = group_with(text, "syrup", "burden", "stir up")
+    syrup = group_with(text, "syrup", "stir up")  # perfect ER-AH-P
+    assert "burden" not in syrup  # ER-schwa with a mismatched coda — too loose
     cups = group_with(text, "cup", "up")
     assert "stir up" not in cups and "syrup" not in cups
 
@@ -261,7 +262,7 @@ def test_weak_phrase_attaches_but_never_founds():
             "fill the cup up to the brim\n"
             "shake the world up if it were up to me\n"
             "the burden is mine")
-    group_with(text, "syrup", "burden", "were up")
+    group_with(text, "syrup", "were up")  # perfect ER-AH-P phrase match
     # ...but two weak phrases alone can't create a group
     assert "were up" not in highlighted("it were up to him\nit were up to her")
 
@@ -698,3 +699,18 @@ def test_vowel_families_are_local():
     for tok in res["tokens"]:
         bg[tok["g"]].add(res["lines"][tok["l"]][tok["s"]:tok["e"]].lower())
     assert not any({"baby", "daddy"} <= s for s in bg.values())
+
+
+def test_garbage_javascript_dont_attach():
+    # both AA-x, but garbage ends JH and javascript ends PT — neither
+    # nests with dollar/scholar's open coda, so they don't join
+    text = ("Garbage collected greatness, a dollar-sign disease\n"
+            "your JavaScript lost at sea, the notebook of the scholar")
+    group_with(text, "dollar", "scholar")
+    res = analyze(Draft(text=text))
+    from collections import defaultdict
+    bg = defaultdict(set)
+    for t in res["tokens"]:
+        bg[t["g"]].add(res["lines"][t["l"]][t["s"]:t["e"]].lower())
+    dfam = next(s for s in bg.values() if "dollar" in s)
+    assert "garbage" not in dfam and "javascript" not in dfam
