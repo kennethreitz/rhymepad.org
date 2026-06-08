@@ -150,7 +150,8 @@
   #editor::placeholder { color: #5a5249; }
   /* colored rhyme segments — background tints only, so the textarea
      text on top stays crisp and box metrics stay identical */
-  .hseg { border-radius: 4px; }
+  .hseg { border-radius: 4px; transition: filter .2s ease, opacity .2s ease; }
+  .editor-shell.focusing .hseg[data-g].lit { color: var(--ink); filter: brightness(1.7) saturate(1.4); }
   .toolbar {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   }
@@ -389,8 +390,8 @@ function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout
 
 let analysis = null;      // last server response
 let backendOk = true;
-let focusGid = null;      // spotlight: the family under the caret
 let focusAllit = null;    // alliteration group under the caret
+let activeFam = null;     // the rhyme family currently emphasized (hover or caret)
 let hoverGid = null;      // family under the mouse (hover preview)
 function gidAtPoint(x, y){
   let off = null;
@@ -445,8 +446,8 @@ function caretAllit(){
 }
 
 function updateSpotlight(){
-  const g = caretGid(), a = caretAllit();
-  if(g !== focusGid || a !== focusAllit){ focusGid = g; focusAllit = a; render(); }
+  focusAllit = caretAllit();
+  setEmphasis(caretGid());
 }
 let analyzeSeq = 0;       // guards against out-of-order responses
 
@@ -607,7 +608,6 @@ function render(){
     if(analysis.near) analysis.near.forEach(t=>{ (nearByLine[t.l] ||= []).push(t); });
   }
   const colorOf = t => `var(--r${groupInfo[t.g].color % COLORS})`;
-  const litGid = hoverGid != null ? hoverGid : focusGid;
   let html = '';
   lines.forEach((line, i)=>{
     // apply spans where the line still matches what the server analyzed;
@@ -653,19 +653,14 @@ function render(){
         // whole word fills dimly; the rhyming part gets a bright underline.
         // gray = an ending still waiting for its answer
         let style = '';
-        let tk = '';
+        let tk = '', dg = '';
         const shadows = [];
         if(w || p){
-          const t = (w && (litGid === null || w.g === litGid)) ? w
-                  : (p && (litGid === null || p.g === litGid)) ? p
-                  : (w || p);
+          const t = w || p;
           let alpha = !t.ph ? (t.end ? 34 : 19) : (t.end ? 24 : 14);
           const str = t.str != null ? t.str : ((groupInfo[t.g] && groupInfo[t.g].strength) || 1);
           alpha = Math.round(alpha * (0.4 + 0.6 * str));  // brightness = this word's rhyme strength
-          if(litGid !== null && t.g === litGid){
-            alpha = Math.min(85, Math.round(alpha * 2.8));
-            style += 'color:#1a120c;font-weight:600;';  // dark ink on the lit chip
-          }
+          dg = ` data-g="${t.g}"`;
           style += `background:color-mix(in srgb, ${colorOf(t)} ${alpha}%, transparent);`;
           if(w){ tk = ` data-tk="${i}:${w.s}"`; if(w.rs == null || a >= w.rs) tk += ` data-tl="${i}:${w.s}"`; }
           // faint underline on the rhyming tail (rs..e) of a word — a
@@ -680,13 +675,18 @@ function render(){
         if(al) shadows.push(`inset 0 -2px 0 0 color-mix(in srgb, var(--r${al.g % COLORS}) 75%, transparent)`);
         if(nr) style += 'text-decoration:underline dotted color-mix(in srgb, var(--accent-2) 60%, transparent);text-underline-offset:3px;';
         if(shadows.length) style += `box-shadow:${shadows.join(',')};`;
-        h += `<span class="hseg"${tk} style="${style}">${text}</span>`;
+        h += `<span class="hseg"${tk}${dg} style="${style}">${text}</span>`;
       }
     }
     const lcls = 'lmark' + (/^\s*#/.test(line) ? ' hdr' : /^\s*[([]/.test(line) ? ' anno' : '');
     html += (line ? `<span class="${lcls}" data-l="${i}">${h}</span>` : '') + '\n';
   });
   highlight.innerHTML = html;
+  if(activeFam != null)
+    highlight.querySelectorAll(`.hseg[data-g="${activeFam}"]`).forEach(s=>{
+      s.classList.add('lit');
+      const lm = s.closest('.lmark'); if(lm) lm.classList.add('litline');
+    });
   renderStress(lines);
   syncLayerHeights();
   renderGutter();
@@ -725,11 +725,11 @@ function spineFor(memberLines, color, cls){
 function renderGutter(){
   gutter.innerHTML = '';
   if(!analysis) return;
-  if(focusGid !== null && rhymeToggle.checked){
-    const g = analysis.groups.find(x=>x.id === focusGid);
+  if(activeFam !== null && rhymeToggle.checked){
+    const g = analysis.groups.find(x=>x.id === activeFam);
     if(g){
       const ls = new Set();
-      analysis.tokens.forEach(t=>{ if(t.g === focusGid) ls.add(t.l); });
+      analysis.tokens.forEach(t=>{ if(t.g === activeFam) ls.add(t.l); });
       spineFor(ls, `var(--r${g.color % COLORS})`, '');
     }
   }
@@ -837,9 +837,9 @@ function buildReadout(){
     const bi = st.lines.indexOf(ln);
     if(bi >= 0) parts.unshift(`bar ${bi + 1}/${st.lines.length}`);
   }
-  if(focusGid !== null && analysis){
-    const g = analysis.groups.find(x=>x.id === focusGid);
-    const fam = [...new Set(analysis.tokens.filter(t=>t.g===focusGid)
+  if(activeFam !== null && analysis){
+    const g = analysis.groups.find(x=>x.id === activeFam);
+    const fam = [...new Set(analysis.tokens.filter(t=>t.g===activeFam)
       .map(t=>analysis.lines[t.l].slice(t.s,t.e).toLowerCase()))];
     if(g && fam.length >= 2)
       parts.push(`rhymes <b>${esc(g.sound)}</b> — ${esc(fam.slice(0,6).join(', '))}`);
@@ -847,18 +847,33 @@ function buildReadout(){
   schemeReadout.innerHTML = parts.join(' &nbsp;&nbsp; ');
 }
 
-editor.addEventListener('input', ()=>{ focusGid = caretGid(); render(); analyzeSoon(); });
+editor.addEventListener('input', ()=>{ render(); analyzeSoon(); });
 editor.addEventListener('scroll', ()=>{ highlight.scrollTop = stresslayer.scrollTop = editor.scrollTop; highlight.scrollLeft = stresslayer.scrollLeft = editor.scrollLeft; renderGutter(); });
+const editorShell = document.querySelector('.editor-shell');
+function setEmphasis(g){
+  if(g === activeFam) return;
+  activeFam = g;
+  editorShell.classList.toggle('focusing', g !== null);
+  highlight.querySelectorAll('.hseg.lit').forEach(s=>s.classList.remove('lit'));
+  highlight.querySelectorAll('.lmark.litline').forEach(s=>s.classList.remove('litline'));
+  if(g !== null)
+    highlight.querySelectorAll(`.hseg[data-g="${g}"]`).forEach(s=>{
+      s.classList.add('lit');
+      const lm = s.closest('.lmark'); if(lm) lm.classList.add('litline');
+    });
+  renderGutter();
+  buildReadout();
+}
 let hoverRAF = 0;
 editor.addEventListener('mousemove', e=>{
   if(hoverRAF) return;
   hoverRAF = requestAnimationFrame(()=>{
     hoverRAF = 0;
     const g = gidAtPoint(e.clientX, e.clientY);
-    if(g !== hoverGid){ hoverGid = g; render(); }
+    setEmphasis(g != null ? g : caretGid());
   });
 });
-editor.addEventListener('mouseleave', ()=>{ if(hoverGid !== null){ hoverGid = null; render(); } });
+editor.addEventListener('mouseleave', ()=> setEmphasis(caretGid()));
 editor.addEventListener('keyup', ()=>{ updateSpotlight(); buildReadout(); });
 editor.addEventListener('click', ()=>{ updateSpotlight(); buildReadout(); });
 
