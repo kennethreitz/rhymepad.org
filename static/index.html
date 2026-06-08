@@ -636,8 +636,8 @@ function render(){
                   : (p && (focusGid === null || p.g === focusGid)) ? p
                   : (w || p);
           let alpha = !t.ph ? (t.end ? 34 : 19) : (t.end ? 24 : 14);
-          const str = (groupInfo[t.g] && groupInfo[t.g].strength) || 1;
-          alpha = Math.round(alpha * (0.45 + 0.55 * str));  // brightness = rhyme strength
+          const str = t.str != null ? t.str : ((groupInfo[t.g] && groupInfo[t.g].strength) || 1);
+          alpha = Math.round(alpha * (0.4 + 0.6 * str));  // brightness = this word's rhyme strength
           if(focusGid !== null && t.g === focusGid){
             alpha = Math.min(85, Math.round(alpha * 2.8));
             style += 'color:#1a120c;font-weight:600;';  // dark ink on the lit chip
@@ -646,7 +646,7 @@ function render(){
           // faint underline on the rhyming tail (rs..e) of a word — a
           // whisper of precision under the full-word fill
           if(w && w.rs != null && a >= w.rs){
-            const u = Math.round(42 * ((groupInfo[w.g] && groupInfo[w.g].strength) || 1));
+            const u = Math.round(42 * (w.str != null ? w.str : 1));
             shadows.push(`inset 0 -1.5px 0 0 color-mix(in srgb, ${colorOf(w)} ${u}%, transparent)`);
           }
         }else if(op){

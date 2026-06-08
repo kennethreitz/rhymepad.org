@@ -1325,9 +1325,14 @@ def analyze(draft: Draft):
     for t in [*tokens, *phrases]:
         if t["gid"] is None:
             continue
+        gstr = groups_out[t["gid"]]["strength"]
+        # a member that only slant-matches its family glows less than the
+        # anchors that define it
+        tstr = min(gstr, 0.6) if t["slant"] else gstr
         d = {"l": t["line"], "s": t["start"], "e": t["end"], "g": t["gid"],
              "end": t["is_end"], "ph": "vowels" in t,
-             "slant": t["slant"] or groups_out[t["gid"]]["slant"]}
+             "slant": t["slant"] or groups_out[t["gid"]]["slant"],
+             "str": round(tstr, 2)}
         if "vowels" not in t:  # single word: where its rhyming tail starts
             d["rs"] = t["start"] + rhyme_char_start(t["word"])
         toks_out.append(d)
