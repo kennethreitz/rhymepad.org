@@ -848,6 +848,7 @@ editor.addEventListener('input', ()=>{ render(); analyzeSoon(); });
 editor.addEventListener('scroll', ()=>{ highlight.scrollTop = stresslayer.scrollTop = editor.scrollTop; highlight.scrollLeft = stresslayer.scrollLeft = editor.scrollLeft; renderGutter(); });
 const editorShell = document.querySelector('.editor-shell');
 function setEmphasis(g){
+  if(!rhymeToggle.checked) g = null;  // no rhyme layer, no focus
   if(g === activeFam) return;
   activeFam = g;
   editorShell.classList.toggle('focusing', g !== null);
