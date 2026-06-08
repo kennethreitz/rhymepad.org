@@ -746,3 +746,11 @@ def test_rhyme_char_start():
     from app import rhyme_char_start
     assert rhyme_char_start("tonight") == 3   # "ight"
     assert rhyme_char_start("write") == 2     # 'ite' (silent-e skipped)
+
+
+def test_near_miss_radar():
+    # two dead endings one vowel apart get flagged; true rhymes don't
+    text = ("I raise my hand\nlook at the bond\nthe city sleeps\nthe ocean wakes")
+    res = analyze(Draft(text=text))
+    near = {res["lines"][t["l"]][t["s"]:t["e"]].lower() for t in res["near"]}
+    assert near == {"hand", "bond"}

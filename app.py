@@ -1350,7 +1350,7 @@ def analyze(draft: Draft):
             for e in entries:
                 e["target"] = mode
 
-    # per-word stress for the optional dots layer (2+ syllables only —
+    # per-word stress for the optional dots layer    # per-word stress for the optional dots layer (2+ syllables only —
     # a dot under every monosyllable is noise, not information)
     stress_out = []
     for t in tokens:
@@ -1407,9 +1407,54 @@ def analyze(draft: Draft):
         if i not in end_gid and end_word_counts[t["word"].lower()] < 2:
             open_out.append({"l": i, "s": t["start"], "e": t["end"]})
 
+    # near-miss radar: a DEAD line ending (rhymes with nothing) that is
+    # one phoneme from another ending in the stanza — a salvageable line
+    near_out = []
+    open_ids = {(o["l"], o["s"]) for o in open_out}
+    ends_by_st = defaultdict(list)
+    for t in tokens:
+        if t["is_end"] and t["word"].lower() not in STOPWORDS:
+            ph = phones_for(t["word"])
+            if ph:
+                ends_by_st[t["sid"]].append((t, _rime_from_phones(ph)))
+
+    def _one_off(a1, b1):
+        pa, pb = a1.split(), b1.split()
+        if pa == pb:
+            return False
+        if abs(len(pa) - len(pb)) > 1:
+            return False
+        i = j = edits = 0
+        while i < len(pa) and j < len(pb):
+            if pa[i] == pb[j]:
+                i += 1; j += 1
+            else:
+                edits += 1
+                if edits > 1:
+                    return False
+                if len(pa) > len(pb): i += 1
+                elif len(pb) > len(pa): j += 1
+                else: i += 1; j += 1
+        if (len(pa) - i) + (len(pb) - j) + edits != 1:
+            return False
+        return pa[0] == pb[0] or pa[-1] == pb[-1]  # share nucleus or coda
+
+    for ends in ends_by_st.values():
+        for ta, ra in ends:
+            if (ta["line"], ta["start"]) not in open_ids:
+                continue  # only flag endings that currently rhyme nothing
+            for tb, rb in ends:
+                if tb is ta or ta["word"].lower() == tb["word"].lower():
+                    continue
+                if _one_off(ra, rb):
+                    near_out.append({"l": ta["line"], "s": ta["start"],
+                                     "e": ta["end"]})
+                    break
+
+
     return {"lines": lines, "tokens": toks_out, "groups": groups_out,
             "stanzas": stanzas, "meter": meter, "stress": stress_out,
-            "allit": allit_out, "open": open_out}
+            "allit": allit_out, "open": open_out, "near": near_out}
 
 
 # --------------------------------------------------------------------------

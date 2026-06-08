@@ -575,12 +575,14 @@ function render(){
   const tokByLine = {};
   const allitByLine = {};
   const openByLine = {};
+  const nearByLine = {};
   const groupInfo = {};
   if(analysis){
     analysis.groups.forEach(g=>{ groupInfo[g.id] = g; });
     analysis.tokens.forEach(t=>{ (tokByLine[t.l] ||= []).push(t); });
     if(analysis.allit) analysis.allit.forEach(t=>{ (allitByLine[t.l] ||= []).push(t); });
     if(analysis.open) analysis.open.forEach(t=>{ (openByLine[t.l] ||= []).push(t); });
+    if(analysis.near) analysis.near.forEach(t=>{ (nearByLine[t.l] ||= []).push(t); });
   }
   const colorOf = t => `var(--r${groupInfo[t.g].color % COLORS})`;
   let html = '';
@@ -604,6 +606,7 @@ function render(){
     const phrases = toks.filter(t=>t.ph);
     const als = (allitToggle.checked && fresh) ? (allitByLine[i] || []) : [];
     const opens = (rhymeToggle.checked && fresh) ? (openByLine[i] || []) : [];
+    const nears = (rhymeToggle.checked && fresh) ? (nearByLine[i] || []) : [];
     let h = '';
     if(!toks.length && !als.length && !opens.length){
       h = esc(line);
@@ -612,6 +615,7 @@ function render(){
       toks.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); if(t.rs != null) cuts.add(t.rs); });
       als.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
       opens.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
+      nears.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
       const pts = [...cuts].sort((a,b)=>a-b);
       for(let k = 0; k < pts.length - 1; k++){
         const a = pts[k], b = pts[k+1];
@@ -621,7 +625,8 @@ function render(){
         const p = phrases.find(t=>t.s <= a && b <= t.e);
         const al = als.find(t=>t.s <= a && b <= t.e);
         const op = opens.find(t=>t.s <= a && b <= t.e);
-        if(!w && !p && !al && !op){ h += text; continue; }
+        const nr = nears.find(t=>t.s <= a && b <= t.e);
+        if(!w && !p && !al && !op && !nr){ h += text; continue; }
         // whole word fills dimly; the rhyming part gets a bright underline.
         // gray = an ending still waiting for its answer
         let style = '';
@@ -646,6 +651,7 @@ function render(){
           style += `background:color-mix(in srgb, var(--ink-dim) 13%, transparent);`;
         }
         if(al) shadows.push(`inset 0 -2px 0 0 color-mix(in srgb, var(--r${al.g % COLORS}) 75%, transparent)`);
+        if(nr) style += 'text-decoration:underline dotted color-mix(in srgb, var(--accent-2) 60%, transparent);text-underline-offset:3px;';
         if(shadows.length) style += `box-shadow:${shadows.join(',')};`;
         h += `<span class="hseg" style="${style}">${text}</span>`;
       }
