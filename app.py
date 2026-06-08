@@ -212,10 +212,11 @@ def founding_projections(key: str) -> dict[str, str]:
         vowels = [p for p in ph if p in ARPA_VOWELS]
         if vowels:
             out["slant"] = "v:" + " ".join(vowels)
-            if len(ph) > 1 and ph[1] not in ARPA_VOWELS:
-                out["vc"] = "c:" + ph[0] + " " + _coda_class(ph[1])
-            else:
-                out["vc"] = "c:" + ph[0]
+            if len(vowels) <= 2:  # consonance only for short rimes
+                if len(ph) > 1 and ph[1] not in ARPA_VOWELS:
+                    out["vc"] = "c:" + ph[0] + " " + _coda_class(ph[1])
+                else:
+                    out["vc"] = "c:" + ph[0]
             mk = _multi_key(vowels)
             if mk:
                 out["multi"] = mk
@@ -335,6 +336,11 @@ def vc_key(word: str) -> str | None:
             break
     tail = pl[start:]
     if not tail or not tail[0][-1].isdigit():
+        return None
+    # consonance is an ENDING sound: allow at most one trailing syllable
+    # (people/sleep), but not a stress buried deep in a long word
+    # (meticulous's IH-K under -ulous shouldn't consonance-rhyme quick)
+    if sum(p[-1].isdigit() for p in tail) > 2:
         return None
     key = DIGITS.sub("", tail[0])
     if len(tail) > 1:

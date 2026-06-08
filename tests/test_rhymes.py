@@ -754,3 +754,16 @@ def test_near_miss_radar():
     res = analyze(Draft(text=text))
     near = {res["lines"][t["l"]][t["s"]:t["e"]].lower() for t in res["near"]}
     assert near == {"hand", "bond"}
+
+
+def test_consonance_only_on_final_syllable():
+    # me-TIC-ulous's mid-word IH-K must not consonance-rhyme quick
+    text = "a maverick imagine that I travel quick\nso meticulous and ridiculous"
+    res = analyze(Draft(text=text))
+    from collections import defaultdict
+    bg = defaultdict(set)
+    for t in res["tokens"]:
+        bg[t["g"]].add(res["lines"][t["l"]][t["s"]:t["e"]].lower())
+    assert not any({"meticulous", "quick"} <= s for s in bg.values())
+    # bliss/exist (final-syllable consonance) still works
+    group_with("bliss whisps in the nights exist", "bliss", "exist")
