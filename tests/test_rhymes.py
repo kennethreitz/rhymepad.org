@@ -740,3 +740,9 @@ def test_no_matching_across_stanzas():
     # but within each stanza they still rhyme
     assert "night" in s1
     assert any({"bright", "sight"} <= s for s in bg.values())
+
+
+def test_rhyme_char_start():
+    from app import rhyme_char_start
+    assert rhyme_char_start("tonight") == 4   # 'ight'
+    assert rhyme_char_start("write") == 2     # 'ite' (silent-e skipped)

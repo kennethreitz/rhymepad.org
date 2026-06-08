@@ -282,6 +282,25 @@ def _grapheme_tail(raw: str) -> str | None:
     return tail
 
 
+def rhyme_char_start(word: str) -> int:
+    """Best-guess character index where a word's rhyming tail begins:
+    take as many vowel-letter groups from the end as the pronunciation's
+    rhyming part has vowels (tonight -> 'ight', creation -> 'ation').
+    Spelling can't map phonemes exactly, so this is an approximation."""
+    ph = phones_for(word)
+    if not ph:
+        return 0
+    nv = len(_tail_vowels(ph)) or 1
+    groups = [m.start() for m in re.finditer(r"[aeiouyAEIOUY]+", word)]
+    # drop a silent trailing 'e' (write, time, fire) so it doesn't eat a slot
+    if (len(groups) > 1 and word[-1] in "eE"
+            and groups[-1] == len(word) - 1):
+        groups.pop()
+    if len(groups) < nv:
+        return 0
+    return groups[len(groups) - nv]
+
+
 def rime_keys(word: str) -> tuple[str, ...]:
     """Perfect-rhyme keys, one per candidate pronunciation."""
     cands = phones_candidates(word)
@@ -1295,12 +1314,16 @@ def analyze(draft: Draft):
             "legend": legend,
         })
 
-    toks_out = [
-        {"l": t["line"], "s": t["start"], "e": t["end"], "g": t["gid"],
-         "end": t["is_end"], "ph": "vowels" in t,
-         "slant": t["slant"] or groups_out[t["gid"]]["slant"]}
-        for t in [*tokens, *phrases] if t["gid"] is not None
-    ]
+    toks_out = []
+    for t in [*tokens, *phrases]:
+        if t["gid"] is None:
+            continue
+        d = {"l": t["line"], "s": t["start"], "e": t["end"], "g": t["gid"],
+             "end": t["is_end"], "ph": "vowels" in t,
+             "slant": t["slant"] or groups_out[t["gid"]]["slant"]}
+        if "vowels" not in t:  # single word: where its rhyming tail starts
+            d["rs"] = t["start"] + rhyme_char_start(t["word"])
+        toks_out.append(d)
     meter, meter_by_line = [], {}
     for i, line in enumerate(lines):
         if sids[i] is None:
