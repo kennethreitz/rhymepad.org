@@ -344,6 +344,8 @@ def _final_coda_tag(pl: list[str]) -> str:
         if p[-1].isdigit():
             last = i
     coda = "".join(_coda_class(DIGITS.sub("", p)) for p in pl[last + 1:])
+    if coda.endswith("S"):
+        coda = coda[:-1]  # trailing plural/3rd-person sibilant is transparent
     return coda or "."
 
 
@@ -398,6 +400,10 @@ def weak_end_key(word: str) -> str | None:
     for i in range(len(pl) - 1, -1, -1):
         if pl[i][-1].isdigit():
             syl = [DIGITS.sub("", p) for p in pl[i:]]
+            if syl[0] in REDUCED:
+                return None  # a bare schwa tail (-le, -able) rhymes
+                # everything; weak endings need a full final vowel
+                # (infancy/see on IY, not middle/unavoidable on AH-L)
             out = [syl[0]] + [_coda_class(c) for c in syl[1:]]
             return "w:" + " ".join(out)
     return None

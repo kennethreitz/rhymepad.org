@@ -714,3 +714,12 @@ def test_garbage_javascript_dont_attach():
         bg[t["g"]].add(res["lines"][t["l"]][t["s"]:t["e"]].lower())
     dfam = next(s for s in bg.values() if "dollar" in s)
     assert "garbage" not in dfam and "javascript" not in dfam
+
+
+def test_weak_ending_needs_a_full_vowel():
+    # middle and unavoidable share only a schwa+L tail — too weak to rhyme
+    text = ("Wednesday has given up and admitted it's the middle\n"
+            "slightly apologetic and entirely unavoidable")
+    assert "middle" not in highlighted(text)
+    # but a full-vowel feminine ending still pairs (infancy/see on IY)
+    group_with("all I can see\nin my infancy", "see", "infancy")
