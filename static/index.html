@@ -630,6 +630,7 @@ function render(){
                   : (p && (focusGid === null || p.g === focusGid)) ? p
                   : (w || p);
           let alpha = !t.ph ? (t.end ? 34 : 19) : (t.end ? 24 : 14);
+          if(t.slant) alpha = Math.round(alpha * 0.62);  // slant sits back
           // the caret's family brightens; everything else stays itself
           if(focusGid !== null && t.g === focusGid){
             alpha = Math.min(85, Math.round(alpha * 2.8));
@@ -801,6 +802,13 @@ function buildReadout(){
     const sch = st.scheme.toUpperCase();
     const shown = sch.slice(0, 16).split('').join(' ') + (sch.length > 16 ? ' …' : '');
     parts.push(`scheme <b>${shown}</b>`);
+  }
+  if(focusGid !== null && analysis){
+    const g = analysis.groups.find(x=>x.id === focusGid);
+    const fam = [...new Set(analysis.tokens.filter(t=>t.g===focusGid)
+      .map(t=>analysis.lines[t.l].slice(t.s,t.e).toLowerCase()))];
+    if(g && fam.length >= 2)
+      parts.push(`rhymes <b>${esc(g.sound)}</b> — ${esc(fam.slice(0,6).join(', '))}`);
   }
   schemeReadout.innerHTML = parts.join(' &nbsp;&nbsp; ');
 }

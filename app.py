@@ -1238,7 +1238,9 @@ def analyze(draft: Draft):
         color = min(avail, key=lambda c: (usage[c], c))
         usage[color] += 1
         chosen.append(color)
-        groups_out.append({"id": gid, "color": color, "slant": g["slant"]})
+        sound = re.sub(r"^[a-z0-9]+:", "", g["key"]).replace("|", " ").lower()
+        groups_out.append({"id": gid, "color": color, "slant": g["slant"],
+                           "sound": sound})
 
     # stanza rhyme schemes from line-ending groups: the token covering
     # the most of the line's tail owns the slot — Em rhymes "-cock it",
