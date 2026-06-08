@@ -1075,49 +1075,84 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
   x.fillStyle = bg; x.fillRect(0, 0, w, h);
   x.font = font; x.textBaseline = 'middle';
 
-  const groupInfo = {}, tokByLine = {};
+  const hexRgb = hex =>{ hex = hex.replace('#',''); if(hex.length===3) hex=hex.split('').map(c=>c+c).join('');
+    return [parseInt(hex.slice(0,2),16),parseInt(hex.slice(2,4),16),parseInt(hex.slice(4,6),16)]; };
+  const inkRgb = hexRgb(ink), dimRgb = hexRgb(css.getPropertyValue('--ink-dim').trim());
+  const mix = (a,b,t)=>`rgb(${a.map((v,i)=>Math.round(v+(b[i]-v)*t)).join(',')})`;
+  const groupInfo = {}, tokByLine = {}, openByLine = {}, nearByLine = {};
   if(analysis){
     analysis.groups.forEach(g=>{ groupInfo[g.id] = g; });
     analysis.tokens.forEach(t=>{ (tokByLine[t.l] ||= []).push(t); });
+    if(analysis.open) analysis.open.forEach(t=>{ (openByLine[t.l] ||= []).push(t); });
+    if(analysis.near) analysis.near.forEach(t=>{ (nearByLine[t.l] ||= []).push(t); });
   }
+  const xat = (line, c)=> PAD + x.measureText(line.slice(0, c)).width;
   lines.forEach((line, i)=>{
     const y = PAD + i * LH + LH / 2;
     const fresh = analysis && analysis.lines[i] === line;
-    const toks = (rhymeToggle.checked && fresh ? (tokByLine[i] || []) : []).filter(t=>groupInfo[t.g]);
+    const on = rhymeToggle.checked && fresh;
+    const toks = (on ? (tokByLine[i] || []) : []).filter(t=>groupInfo[t.g]);
     const words = toks.filter(t=>!t.ph), phrases = toks.filter(t=>t.ph);
-    const cuts = new Set([0, line.length]);
-    toks.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
-    const pts = [...cuts].sort((a,b)=>a-b);
-    for(let k = 0; k < pts.length - 1; k++){
-      const a = pts[k], b = pts[k+1];
-      const wt = words.find(t=>t.s <= a && b <= t.e);
-      const pt = phrases.find(t=>t.s <= a && b <= t.e);
-      if(!wt && !pt) continue;
-      const t = wt || pt;
-      x.globalAlpha = wt ? (wt.end ? 0.34 : 0.19) : (pt.end ? 0.24 : 0.14);
-      x.fillStyle = palette[groupInfo[t.g].color % COLORS];
-      const x0 = PAD + x.measureText(line.slice(0, a)).width;
-      const wpx = x.measureText(line.slice(a, b)).width;
+    const opens = on ? (openByLine[i] || []) : [];
+    const nears = on ? (nearByLine[i] || []) : [];
+    const palHex = t => palette[groupInfo[t.g].color % COLORS];
+
+    // 1) fills — one rounded rect per token, opacity scaled by strength
+    const fillTok = (t, end0)=>{
+      let base = !t.ph ? (t.end ? 34 : 19) : (t.end ? 24 : 14);
+      const str = t.str != null ? t.str : (groupInfo[t.g].strength || 1);
+      x.globalAlpha = (base * (0.4 + 0.6*str)) / 100;
+      x.fillStyle = palHex(t);
       x.beginPath();
-      x.roundRect(x0 - 2, y - FS * 0.72, wpx + 4, FS * 1.42, 4);
-      x.fill();
+      x.roundRect(xat(line,t.s) - 2, y - FS*0.72, xat(line,t.e)-xat(line,t.s) + 4, FS*1.42, 4);
+      x.fill(); x.globalAlpha = 1;
+    };
+    phrases.forEach(t=>fillTok(t)); words.forEach(t=>fillTok(t));
+    // gray fill on unanswered endings
+    opens.forEach(t=>{
+      x.globalAlpha = 0.13; x.fillStyle = ink;
+      x.beginPath();
+      x.roundRect(xat(line,t.s) - 2, y - FS*0.72, xat(line,t.e)-xat(line,t.s) + 4, FS*1.42, 4);
+      x.fill(); x.globalAlpha = 1;
+    });
+
+    // 2) base text (ink, or dim for headers/annotations)
+    const isHdr = /^\s*#/.test(line), isAnno = /^\s*[([]/.test(line);
+    x.font = isHdr ? '700 ' + font : font;
+    x.fillStyle = isHdr ? '#8a7d6c' : isAnno ? '#6a5f52' : ink;
+    x.fillText(line, PAD, y);
+    x.font = font;
+
+    // 3) tint each rhyming word in its family color, over the ink
+    words.forEach(t=>{
+      const str = t.str != null ? t.str : (groupInfo[t.g].strength || 1);
+      x.fillStyle = mix(inkRgb, hexRgb(palHex(t)), 0.28 + 0.32*str);
+      x.fillText(line.slice(t.s, t.e), xat(line,t.s), y);
+    });
+
+    // 4) sub-word tail underline (rs..e) per word
+    words.forEach(t=>{
+      if(t.rs == null) return;
+      const str = t.str != null ? t.str : 1;
+      x.globalAlpha = 0.42 * str; x.fillStyle = palHex(t);
+      x.fillRect(xat(line,t.rs), y + FS*0.62, xat(line,t.e)-xat(line,t.rs), 1.5);
       x.globalAlpha = 1;
-    }
+    });
+    // alliteration underline
     if(allitToggle.checked && fresh){
       (analysis.allit || []).filter(t=>t.l===i).forEach(t=>{
-        const left = PAD + x.measureText(line.slice(0, t.s)).width;
-        const wpx = x.measureText(line.slice(t.s, t.e)).width;
-        x.globalAlpha = 0.75;
-        x.fillStyle = palette[t.g % COLORS];
-        x.fillRect(left - 1, y + FS * 0.55, wpx + 2, 2);
+        x.globalAlpha = 0.75; x.fillStyle = palette[t.g % COLORS];
+        x.fillRect(xat(line,t.s) - 1, y + FS*0.66, xat(line,t.e)-xat(line,t.s) + 2, 2);
         x.globalAlpha = 1;
       });
     }
-    const isHdr = /^\s*#/.test(line);
-    x.font = isHdr ? '700 ' + font : font;
-    x.fillStyle = isHdr ? '#8a7d6c' : /^\s*[([]/.test(line) ? '#6a5f52' : ink;
-    x.fillText(line, PAD, y);
-    x.font = font;
+    // near-miss: dotted gold underline
+    nears.forEach(t=>{
+      x.fillStyle = mix(inkRgb, hexRgb(css.getPropertyValue('--accent-2').trim()), 0.6);
+      let px = xat(line,t.s), end = xat(line,t.e);
+      while(px < end){ x.fillRect(px, y + FS*0.62, 1.6, 1.6); px += 3.5; }
+    });
+
     if(rhythm && fresh){
       const spans = (analysis.stress.filter(s=>s.l===i)).sort((a,b)=>a.s-b.s);
       x.font = "8px 'Spline Sans Mono', monospace";
