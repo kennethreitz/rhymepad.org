@@ -53,7 +53,7 @@ def g2p_phones(word: str) -> str | None:
 
 WORD_RE = re.compile(r"[A-Za-z][A-Za-z']*")
 DIGITS = re.compile(r"\d")
-COLORS = 12  # matches --r0..--r11 in the stylesheet
+COLORS = 16  # matches --r0..--r15 in the stylesheet
 
 #: function words too common to flag as internal rhymes
 #: (they still count when they end a line)
@@ -1193,12 +1193,16 @@ def analyze(draft: Draft):
     grown = [s | {l - 1 for l in s} | {l + 1 for l in s} for s in line_sets]
     groups_out = []
     chosen: list[int] = []
+    usage = [0] * COLORS
     for gid, g in enumerate(raw_groups):
         for t in g["toks"]:
             t["gid"] = gid
-        used = {chosen[j] for j in range(gid) if grown[j] & line_sets[gid]}
-        color = next((c for c in range(COLORS) if c not in used),
-                     gid % COLORS)
+        blocked = {chosen[j] for j in range(gid) if grown[j] & line_sets[gid]}
+        # among non-adjacent colors, take the globally least-used one, so
+        # hues spread evenly instead of piling on the low indices
+        avail = [c for c in range(COLORS) if c not in blocked] or list(range(COLORS))
+        color = min(avail, key=lambda c: (usage[c], c))
+        usage[color] += 1
         chosen.append(color)
         groups_out.append({"id": gid, "color": color, "slant": g["slant"]})
 
