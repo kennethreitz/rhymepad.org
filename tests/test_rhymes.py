@@ -744,5 +744,5 @@ def test_no_matching_across_stanzas():
 
 def test_rhyme_char_start():
     from app import rhyme_char_start
-    assert rhyme_char_start("tonight") == 4   # 'ight'
+    assert rhyme_char_start("tonight") == 3   # "ight"
     assert rhyme_char_start("write") == 2     # 'ite' (silent-e skipped)
