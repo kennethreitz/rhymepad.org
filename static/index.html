@@ -117,9 +117,6 @@
   #highlight .anno { color: #6a5f52; }
   #highlight .hdr { color: #8a7d6c; font-weight: 700; }
   #gutter { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
-  #weave { position: absolute; inset: 0; pointer-events: none; z-index: 0; width: 100%; height: 100%; }
-  @keyframes weavedraw { to { stroke-dashoffset: 0; } }
-  @keyframes weavepop { 0% { opacity: 0; transform: scale(0); } 100% { opacity: .95; } }
   #gutter .bracket {
     position: absolute; left: 7px; width: 7px;
     border: 2.5px solid currentColor; border-right: 0;
@@ -293,7 +290,6 @@
     <div class="editor-shell">
       <div id="stresslayer"></div>
       <div id="gutter"></div>
-      <svg id="weave"></svg>
       <div id="highlight"></div>
       <textarea id="editor" spellcheck="false" placeholder="Start writing. Leave a blank line between stanzas.
 Rhymes are detected phonetically — same color = same sound.
@@ -372,7 +368,6 @@ const editor = document.getElementById('editor');
 const highlight = document.getElementById('highlight');
 const stresslayer = document.getElementById('stresslayer');
 const gutter = document.getElementById('gutter');
-const weave = document.getElementById('weave');
 
 const stressToggle = document.getElementById('stressToggle');
 stressToggle.checked = false;
@@ -396,6 +391,28 @@ let analysis = null;      // last server response
 let backendOk = true;
 let focusGid = null;      // spotlight: the family under the caret
 let focusAllit = null;    // alliteration group under the caret
+let hoverGid = null;      // family under the mouse (hover preview)
+function gidAtPoint(x, y){
+  let off = null;
+  if(document.caretPositionFromPoint){
+    const c = document.caretPositionFromPoint(x, y);
+    if(c && c.offsetNode) off = c.offset;
+  }else if(document.caretRangeFromPoint){
+    const r = document.caretRangeFromPoint(x, y);
+    if(r) off = r.startOffset;
+  }
+  if(off == null) return null;
+  const before = editor.value.slice(0, off);
+  const ln = before.split('\n').length - 1;
+  const col = off - (before.lastIndexOf('\n') + 1);
+  let best = null;
+  (analysis ? analysis.tokens : []).forEach(t=>{
+    if(t.l === ln && !t.ph && t.s <= col && col < t.e){
+      if(!best || (t.e - t.s) < (best.e - best.s)) best = t;
+    }
+  });
+  return best ? best.g : null;
+}
 
 function caretGid(){
   if(!analysis || editor.selectionStart !== editor.selectionEnd) return null;
@@ -590,6 +607,7 @@ function render(){
     if(analysis.near) analysis.near.forEach(t=>{ (nearByLine[t.l] ||= []).push(t); });
   }
   const colorOf = t => `var(--r${groupInfo[t.g].color % COLORS})`;
+  const litGid = hoverGid != null ? hoverGid : focusGid;
   let html = '';
   lines.forEach((line, i)=>{
     // apply spans where the line still matches what the server analyzed;
@@ -638,13 +656,13 @@ function render(){
         let tk = '';
         const shadows = [];
         if(w || p){
-          const t = (w && (focusGid === null || w.g === focusGid)) ? w
-                  : (p && (focusGid === null || p.g === focusGid)) ? p
+          const t = (w && (litGid === null || w.g === litGid)) ? w
+                  : (p && (litGid === null || p.g === litGid)) ? p
                   : (w || p);
           let alpha = !t.ph ? (t.end ? 34 : 19) : (t.end ? 24 : 14);
           const str = t.str != null ? t.str : ((groupInfo[t.g] && groupInfo[t.g].strength) || 1);
           alpha = Math.round(alpha * (0.4 + 0.6 * str));  // brightness = this word's rhyme strength
-          if(focusGid !== null && t.g === focusGid){
+          if(litGid !== null && t.g === litGid){
             alpha = Math.min(85, Math.round(alpha * 2.8));
             style += 'color:#1a120c;font-weight:600;';  // dark ink on the lit chip
           }
@@ -672,7 +690,6 @@ function render(){
   renderStress(lines);
   syncLayerHeights();
   renderGutter();
-  renderWeave();
   highlight.scrollTop = editor.scrollTop;
   highlight.scrollLeft = editor.scrollLeft;
   buildReadout();
@@ -702,88 +719,6 @@ function spineFor(memberLines, color, cls){
     tk.style.top = (c - 1.25) + 'px';
     tk.style.background = `color-mix(in srgb, ${color} 45%, transparent)`;
     gutter.appendChild(tk);
-  });
-}
-
-function renderWeave(){
-  weave.innerHTML = '';
-  if(focusGid === null || !analysis || !rhymeToggle.checked) return;
-  const g = analysis.groups.find(x=>x.id === focusGid);
-  if(!g) return;
-  const shell = highlight.getBoundingClientRect();
-  const pts = [];
-  analysis.tokens.filter(t=>t.g===focusGid && !t.ph).forEach(t=>{
-    const seg = highlight.querySelector(`[data-tl="${t.l}:${t.s}"]`)
-             || highlight.querySelector(`[data-tk="${t.l}:${t.s}"]`);
-    if(!seg) return;
-    const r = seg.getBoundingClientRect();
-    pts.push({x: r.left - shell.left + r.width/2,
-              y: r.top - shell.top + r.height/2,
-              str: t.str != null ? t.str : 1, end: !!t.end});
-  });
-  if(pts.length < 2) return;
-
-  const ns='http://www.w3.org/2000/svg';
-  const col = getComputedStyle(document.documentElement).getPropertyValue(`--r${g.color % COLORS}`).trim();
-  weave.innerHTML = `<defs>`
-    + `<filter id="wg" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter>`
-    + `<filter id="wgs" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="0.6"/></filter>`
-    + `</defs>`;
-
-  // the spine follows the strong rhymes — line endings — and internal
-  // rhymes fork off it. (no endings in the family? the whole set is the spine)
-  let spine = pts.filter(p=>p.end).sort((a,b)=>a.y-b.y || a.x-b.x);
-  let branches;
-  if(spine.length >= 2){ branches = pts.filter(p=>!p.end); }
-  else if(spine.length === 1){ branches = pts.filter(p=>!p.end); }
-  else { spine = pts.slice().sort((a,b)=>a.y-b.y || a.x-b.x); branches = []; }
-
-  function smooth(ps){
-    let d = `M ${ps[0].x.toFixed(1)} ${ps[0].y.toFixed(1)}`;
-    for(let i=0;i<ps.length-1;i++){
-      const p0=ps[i-1]||ps[i], p1=ps[i], p2=ps[i+1], p3=ps[i+2]||p2, t=0.8;
-      const c1x=p1.x+(p2.x-p0.x)/6*t, c1y=p1.y+(p2.y-p0.y)/6*t;
-      const c2x=p2.x-(p3.x-p1.x)/6*t, c2y=p2.y-(p3.y-p1.y)/6*t;
-      d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
-    }
-    return d;
-  }
-  const mkpath=(d,sw,op,filt,anim)=>{
-    const p=document.createElementNS(ns,'path');
-    p.setAttribute('d',d); p.setAttribute('fill','none'); p.setAttribute('stroke',col);
-    p.setAttribute('stroke-width',sw); p.setAttribute('stroke-linecap','round');
-    p.setAttribute('stroke-linejoin','round'); p.setAttribute('opacity',op);
-    if(filt === 'glow') p.setAttribute('filter','url(#wg)');
-    else if(filt === 'soft') p.setAttribute('filter','url(#wgs)');
-    if(anim){ p.setAttribute('pathLength','1'); p.style.strokeDasharray='1';
-      p.style.strokeDashoffset='1'; p.style.animation='weavedraw .5s ease-out forwards'; }
-    weave.appendChild(p);
-  };
-
-  // forks: each internal rhyme tendrils to its nearest spine node
-  branches.forEach(b=>{
-    let near=spine[0], best=1e9;
-    spine.forEach(s=>{ const dd=(s.x-b.x)**2+(s.y-b.y)**2; if(dd<best){best=dd;near=s;} });
-    const mx=(b.x+near.x)/2, my=(b.y+near.y)/2 - Math.min(18, Math.abs(b.x-near.x)*0.25);
-    const d=`M ${b.x.toFixed(1)} ${b.y.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)}, ${near.x.toFixed(1)} ${near.y.toFixed(1)}`;
-    mkpath(d, '1.1', '0.55', 'soft', false);
-  });
-
-  // the spine, glowing and drawn-in
-  if(spine.length >= 2){
-    const d=smooth(spine);
-    mkpath(d, '6', '0.3', 'glow', false);
-    mkpath(d, '2.2', '0.6', 'soft', true);
-  }
-
-  pts.forEach((p,i)=>{
-    const c=document.createElementNS(ns,'circle');
-    c.setAttribute('cx',p.x.toFixed(1)); c.setAttribute('cy',p.y.toFixed(1));
-    c.setAttribute('r',((p.end?2.0:1.3) + 2.0*p.str).toFixed(1)); c.setAttribute('fill',col);
-    c.setAttribute('opacity', p.end ? '0.7' : '0.5');
-    c.style.transformOrigin=`${p.x.toFixed(1)}px ${p.y.toFixed(1)}px`;
-    c.style.animation=`weavepop .35s ${(0.04*i).toFixed(2)}s ease-out both`;
-    weave.appendChild(c);
   });
 }
 
@@ -913,7 +848,17 @@ function buildReadout(){
 }
 
 editor.addEventListener('input', ()=>{ focusGid = caretGid(); render(); analyzeSoon(); });
-editor.addEventListener('scroll', ()=>{ highlight.scrollTop = stresslayer.scrollTop = editor.scrollTop; highlight.scrollLeft = stresslayer.scrollLeft = editor.scrollLeft; renderGutter(); renderWeave(); });
+editor.addEventListener('scroll', ()=>{ highlight.scrollTop = stresslayer.scrollTop = editor.scrollTop; highlight.scrollLeft = stresslayer.scrollLeft = editor.scrollLeft; renderGutter(); });
+let hoverRAF = 0;
+editor.addEventListener('mousemove', e=>{
+  if(hoverRAF) return;
+  hoverRAF = requestAnimationFrame(()=>{
+    hoverRAF = 0;
+    const g = gidAtPoint(e.clientX, e.clientY);
+    if(g !== hoverGid){ hoverGid = g; render(); }
+  });
+});
+editor.addEventListener('mouseleave', ()=>{ if(hoverGid !== null){ hoverGid = null; render(); } });
 editor.addEventListener('keyup', ()=>{ updateSpotlight(); buildReadout(); });
 editor.addEventListener('click', ()=>{ updateSpotlight(); buildReadout(); });
 
