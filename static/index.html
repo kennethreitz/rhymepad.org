@@ -115,6 +115,7 @@
     z-index: 1;
   }
   #highlight .anno { color: #6a5f52; }
+  #highlight .hdr { color: #8a7d6c; font-weight: 700; }
   #gutter { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
   #gutter .bracket {
     position: absolute; left: 7px; width: 7px;
@@ -642,7 +643,7 @@ function render(){
         h += `<span class="hseg" style="${style}">${text}</span>`;
       }
     }
-    const lcls = 'lmark' + (/^\s*[#([]/.test(line) ? ' anno' : '');
+    const lcls = 'lmark' + (/^\s*#/.test(line) ? ' hdr' : /^\s*[([]/.test(line) ? ' anno' : '');
     html += (line ? `<span class="${lcls}" data-l="${i}">${h}</span>` : '') + '\n';
   });
   highlight.innerHTML = html;
@@ -1047,8 +1048,11 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
         x.globalAlpha = 1;
       });
     }
-    x.fillStyle = /^\s*[#([]/.test(line) ? '#6a5f52' : ink;
+    const isHdr = /^\s*#/.test(line);
+    x.font = isHdr ? '700 ' + font : font;
+    x.fillStyle = isHdr ? '#8a7d6c' : /^\s*[([]/.test(line) ? '#6a5f52' : ink;
     x.fillText(line, PAD, y);
+    x.font = font;
     if(rhythm && fresh){
       const spans = (analysis.stress.filter(s=>s.l===i)).sort((a,b)=>a.s-b.s);
       x.font = "8px 'Spline Sans Mono', monospace";
