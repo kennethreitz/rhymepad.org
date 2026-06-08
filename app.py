@@ -1258,8 +1258,15 @@ def analyze(draft: Draft):
         usage[color] += 1
         chosen.append(color)
         sound = re.sub(r"^[a-z0-9]+:", "", g["key"]).replace("|", " ").lower()
+        k = g["key"]
+        strength = (1.0 if k.startswith("p:")        # perfect rime
+                    else 0.82 if k.startswith("m:")   # multisyllabic run
+                    else 0.7 if k.startswith("m2:")   # consonant-backed
+                    else 0.6 if k.startswith("v:")    # vowel slant
+                    else 0.55 if k.startswith("c:")   # consonance
+                    else 0.5)                          # weak ending
         groups_out.append({"id": gid, "color": color, "slant": g["slant"],
-                           "sound": sound})
+                           "sound": sound, "strength": round(strength, 2)})
 
     # stanza rhyme schemes from line-ending groups: the token covering
     # the most of the line's tail owns the slot — Em rhymes "-cock it",
