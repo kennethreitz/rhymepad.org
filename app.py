@@ -617,6 +617,11 @@ def analyze(draft: Draft):
                 continue
             if a["word"].lower() in refrain:
                 continue
+            _pc = phones_for(c["word"])
+            if (c["word"].lower() in STOPWORDS and _pc
+                    and _pc.split()[-1][-1].isdigit()):
+                continue  # tail is an open-vowel stopword ("smell like A")
+                # — it dangles; "mean to IT" (closed) still rhymes
             pa, pb, pc = (phones_for(a["word"]), phones_for(b["word"]),
                           phones_for(c["word"]))
             if not (pa and pb and pc):

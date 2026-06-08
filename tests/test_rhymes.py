@@ -767,3 +767,10 @@ def test_consonance_only_on_final_syllable():
     assert not any({"meticulous", "quick"} <= s for s in bg.values())
     # bliss/exist (final-syllable consonance) still works
     group_with("bliss whisps in the nights exist", "bliss", "exist")
+
+
+def test_triple_not_dangling_on_stopword():
+    # "smell like a" trails into an article; it shouldn't rhyme "myself why"
+    text = ("should I listen to myself why\n"
+            "it just don't smell like a")
+    assert "smell like a" not in highlighted(text)
