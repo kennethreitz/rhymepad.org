@@ -663,12 +663,9 @@ function render(){
           dg = ` data-g="${t.g}"`;
           style += `background:color-mix(in srgb, ${colorOf(t)} ${alpha}%, transparent);`;
           if(w){ tk = ` data-tk="${i}:${w.s}"`; if(w.rs == null || a >= w.rs) tk += ` data-tl="${i}:${w.s}"`; }
-          // faint underline on the rhyming tail (rs..e) of a word — a
-          // whisper of precision under the full-word fill
-          if(w && w.rs != null && a >= w.rs){
-            const u = Math.round(42 * (w.str != null ? w.str : 1));
-            shadows.push(`inset 0 -1.5px 0 0 color-mix(in srgb, ${colorOf(w)} ${u}%, transparent)`);
-          }
+          // the whole rhyming word takes a quiet tint of the family color
+          const mix = Math.round(28 + 32 * str);
+          style += `color:color-mix(in srgb, ${colorOf(t)} ${mix}%, var(--ink));`;
         }else if(op){
           style += `background:color-mix(in srgb, var(--ink-dim) 13%, transparent);`;
         }
