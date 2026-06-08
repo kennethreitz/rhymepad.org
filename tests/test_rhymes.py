@@ -723,3 +723,20 @@ def test_weak_ending_needs_a_full_vowel():
     assert "middle" not in highlighted(text)
     # but a full-vowel feminine ending still pairs (infancy/see on IY)
     group_with("all I can see\nin my infancy", "see", "infancy")
+
+
+def test_no_matching_across_stanzas():
+    # each stanza is its own rhyme world: light/night in stanza 1 must
+    # not group with bright/sight in stanza 2
+    text = ("the city light\nshines every night\n\n"
+            "the future's bright\nit's in my sight")
+    res = analyze(Draft(text=text))
+    from collections import defaultdict
+    bg = defaultdict(set)
+    for t in res["tokens"]:
+        bg[t["g"]].add(res["lines"][t["l"]][t["s"]:t["e"]].lower())
+    s1 = next(s for s in bg.values() if "light" in s)
+    assert "bright" not in s1 and "sight" not in s1
+    # but within each stanza they still rhyme
+    assert "night" in s1
+    assert any({"bright", "sight"} <= s for s in bg.values())

@@ -628,19 +628,20 @@ def analyze(draft: Draft):
         if not t["is_end"] and (w in STOPWORDS or w in refrain or len(w) < 2):
             continue
         for key in rime_keys(t["word"]):
-            by_rime[key].append(t)
+            by_rime[(t["sid"], key)].append(t)
     for p in phrases:
         # all phrases compete on exact rime — "is it" matches "visit"
         # phone-for-phone; the qualification below stops stopword-anchored
         # phrases from pairing with nothing but each other
-        by_rime["p:" + p["rime"]].append(p)
+        by_rime[(p["sid"], "p:" + p["rime"])].append(p)
 
     # biggest buckets claim their tokens first, so a word with several
     # candidate pronunciations joins its best-supported rhyme group.
     # Each group remembers its founding key — the sound it's about.
     raw_groups: list[dict] = []
     claimed: set[int] = set()
-    for key, toks in sorted(by_rime.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+    for (sid, key), toks in sorted(by_rime.items(),
+                                   key=lambda kv: (-len(kv[1]), kv[0][1])):
         toks = [t for t in toks if id(t) not in claimed]
         # a SECONDARY pronunciation only reaches nearby partners (the
         # verb pred-i-KATE shouldn't hand "predicate" to a hook's "eight"
@@ -1080,6 +1081,8 @@ def analyze(draft: Draft):
             # single vowel, the final codas must nest too — forever (.)
             # and sequential (L) share EH-x and still aren't one family
             if va == vb or _tail_of(va, vb) or _tail_of(vb, va):
+                if raw_groups[ai]["toks"][0]["sid"] != raw_groups[bi]["toks"][0]["sid"]:
+                    continue  # families don't fuse across stanzas
                 if (len(va) == 1 and len(vb) == 1
                         and not _sets_nest(_gtags(ai), _gtags(bi))):
                     continue
@@ -1152,6 +1155,8 @@ def analyze(draft: Draft):
                 continue
             s, l = (ca, cb) if len(ca) < len(cb) else (cb, ca)
             nested = l[:len(s)] == s or l[len(l) - len(s):] == s
+            if raw_groups[gi]["toks"][0]["sid"] != raw_groups[gj]["toks"][0]["sid"]:
+                continue  # no coda fusion across stanzas
             # end-dominated families rhyme on their bare vowel, the way
             # lone endings always could (blood/mud + thugs/drugs — the
             # Kanye chorus chain); mid-line families keep their codas
