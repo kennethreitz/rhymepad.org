@@ -527,7 +527,7 @@ def analyze(draft: Draft):
             sids.append(None)
             prev_blank = True
             continue
-        if stripped[0] in "#([":
+        if stripped[0] in "#[":
             # annotation line ([Chorus], (yeah), # notes) — no highlighting,
             # no scheme letter, and it doesn't split the stanza either
             sids.append(None)

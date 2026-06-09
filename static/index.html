@@ -675,7 +675,7 @@ function render(){
         h += `<span class="hseg"${tk}${dg} style="${style}">${text}</span>`;
       }
     }
-    const lcls = 'lmark' + (/^\s*#/.test(line) ? ' hdr' : /^\s*[([]/.test(line) ? ' anno' : '');
+    const lcls = 'lmark' + (/^\s*#/.test(line) ? ' hdr' : /^\s*\[/.test(line) ? ' anno' : '');
     html += (line ? `<span class="${lcls}" data-l="${i}">${h}</span>` : '') + '\n';
   });
   highlight.innerHTML = html;
@@ -1117,7 +1117,7 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
     });
 
     // 2) base text (ink, or dim for headers/annotations)
-    const isHdr = /^\s*#/.test(line), isAnno = /^\s*[([]/.test(line);
+    const isHdr = /^\s*#/.test(line), isAnno = /^\s*\[/.test(line);
     x.font = isHdr ? '700 ' + font : font;
     x.fillStyle = isHdr ? '#8a7d6c' : isAnno ? '#6a5f52' : ink;
     x.fillText(line, PAD, y);

@@ -267,21 +267,26 @@ def test_weak_phrase_attaches_but_never_founds():
     assert "were up" not in highlighted("it were up to him\nit were up to her")
 
 
-def test_annotation_lines_ignored():
+def test_bracket_and_hash_lines_ignored():
     text = ("[Chorus]\n"
             "the cat\n"
             "a hat\n"
             "# note: tighten this verse\n"
-            "(yeah)\n"
             "so blue\n"
             "so true")
     res = analyze(Draft(text=text))
     assert "chorus" not in highlighted(text)
     assert "note" not in highlighted(text)
-    # annotations don't split the stanza or earn scheme letters
+    # [ and # lines don't split the stanza or earn scheme letters
     (st,) = res["stanzas"]
-    assert st["lines"] == [1, 2, 5, 6]
+    assert st["lines"] == [1, 2, 4, 5]
     assert st["scheme"] == "aabb"
+
+
+def test_paren_lines_are_lyrics():
+    # ( lines are real lyrics now (MF DOOM style), not ignored ad-libs
+    text = "the city bright tonight\n(shining all the light)"
+    group_with(text, "tonight", "light")
 
 
 def test_perfect_subgroup_fuses_with_slant_family():
