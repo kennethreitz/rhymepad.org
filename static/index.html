@@ -1970,6 +1970,33 @@ function rapVoice(){
   const vs = speechSynthesis.getVoices().filter(v=>v.lang.startsWith('en'));
   return vs.find(v=>/Aaron|Daniel|Samantha|Google US/i.test(v.name)) || vs[0] || null;
 }
+function hypeVoice(main){
+  // the hype man: any other english voice in the booth
+  const vs = speechSynthesis.getVoices().filter(v=>v.lang.startsWith('en'));
+  return vs.find(v=>!main || v.name !== main.name) || main;
+}
+let voiceCal = 0;  // measured syllables/sec at rate 1, per voice
+function calibrateVoice(voice){
+  const key = 'rhymepad.cal.' + (voice ? voice.name : 'default');
+  const saved = parseFloat(localStorage.getItem(key));
+  if(saved > 1 && saved < 12){ voiceCal = saved; return; }
+  // a silent 12-syllable phrase, timed — every platform speaks at its
+  // own pace, so we measure instead of guessing
+  const u = new SpeechSynthesisUtterance('one two three four five six seven eight nine ten eleven');
+  if(voice) u.voice = voice;
+  u.volume = 0; u.rate = 1;
+  let t0 = 0;
+  u.onstart = ()=>{ t0 = performance.now(); };
+  u.onend = ()=>{
+    if(!t0) return;
+    const sec = (performance.now() - t0) / 1000;
+    if(sec > 1 && sec < 12){
+      voiceCal = 13 / sec;
+      localStorage.setItem(key, voiceCal.toFixed(2));
+    }
+  };
+  speechSynthesis.speak(u);
+}
 
 function stopRap(){
   rapping = false;
@@ -2003,6 +2030,20 @@ function startRap(){
   rapBtn.innerHTML = 'Stop rap';
   const editorLines = editor.value.split('\n');
   const voice = rapVoice();
+  const hype = hypeVoice(voice);
+  const calibrating = !voiceCal && coldStart;
+  if(calibrating){
+    calibrateVoice(voice);   // silent; runs once per voice, ever
+    lead += barSec;          // give the measurement its own bar
+  }
+  // section awareness: [Chorus]/[Hook] lines perform hotter
+  let _sec = '';
+  const sectionOf = {};
+  editorLines.forEach((ln, i)=>{
+    const m = ln.match(/^\s*\[([^\]]+)/);
+    if(m) _sec = m[1].toLowerCase();
+    sectionOf[i] = _sec;
+  });
   const sylOf = l=>{
     const m = analysis && analysis.lines[l.i] === editor.value.split('\n')[l.i]
       && analysis.meter && analysis.meter.find(x=>x.l===l.i);
@@ -2012,7 +2053,7 @@ function startRap(){
   // flow planning: each line claims half a bar, one bar, or two bars —
   // whichever lets the voice stay nearest its natural rate. Dense lines
   // go halftime (two bars); sparse ones double-time (packed two to a bar).
-  const SYL_PER_SEC = 4.3;  // TTS at rate 1 really does ~4.3 syl/sec
+  const SYL_PER_SEC = voiceCal || 4.3;  // measured per voice when we can
   const EIGHTH = barSec / 8;
   const endGroup = {};
   if(analysis){
@@ -2040,11 +2081,12 @@ function startRap(){
     return entry;
   });
 
-  const say = (text, at, rate, pitch, lineIdx, charMap, vol)=>{
+  const say = (text, at, rate, pitch, lineIdx, charMap, vol, v2)=>{
     rapTimers.push(setTimeout(()=>{
       if(!rapping) return;
       const u = new SpeechSynthesisUtterance(text);
-      if(voice) u.voice = voice;
+      const vv = v2 || voice;
+      if(vv) u.voice = vv;
       u.rate = rate; u.pitch = pitch;
       if(vol != null) u.volume = vol;
       if(lineIdx != null && charMap){
@@ -2079,13 +2121,18 @@ function startRap(){
     const chunks = rawChunks.map(rc=>{
       const off = p.l.raw.indexOf(rc, cursor);
       cursor = off + rc.length;
-      let text = '', map = [];
+      let text = '', map = [], hypeText = '', depth = 0;
       for(let q = 0; q < rc.length; q++){
-        if('[]()*_#"'.includes(rc[q])) continue;
+        const c = rc[q];
+        if(c === '('){ depth++; continue; }
+        if(c === ')'){ depth = Math.max(0, depth - 1); hypeText += ' '; continue; }
+        if(depth > 0){ hypeText += c; continue; }  // the hype man's lines
+        if('[]*_#"'.includes(c)) continue;
         map.push(base + off + q);
-        text += rc[q];
+        text += c;
       }
-      return {text: text.trim() ? text : rc, map, line: p.l.i};
+      return {text: text.trim() ? text : rc, map, line: p.l.i,
+              hype: hypeText.trim()};
     }).filter(c=>c.text.trim());
     if(!chunks.length) return;
     // clusters only APPORTION the line's true syllable count across
@@ -2094,8 +2141,10 @@ function startRap(){
       c, w: Math.max(1, (c.text.match(/[aeiouy]+/gi) || []).length)}));
     const wtotal = cs.reduce((a, b)=>a + b.w, 0);
     const usable = p.slot * 7 / 8;   // breathe on the last eighth
-    // the energy arc: pitch climbs gently through each 4-bar phrase
-    const basePitch = 0.88 + (p.k % 4) * 0.018;
+    // the energy arc: pitch climbs gently through each 4-bar phrase;
+    // chorus/hook sections perform a step hotter
+    const inChorus = /chorus|hook/.test(sectionOf[p.l.i] || '');
+    const basePitch = 0.88 + (p.k % 4) * 0.018 + (inChorus ? 0.06 : 0);
     // couplet cadence from the engine's own rhyme families: the first
     // line of a rhymed pair stays suspended, its answer resolves low
     let cadence = 0.78;
@@ -2112,16 +2161,20 @@ function startRap(){
       if(lead0 > 0) at = Math.max(p.at, at - Math.min(EIGHTH, lead0 / (SYL_PER_SEC * rate)));
       say(ch.c.text, at, rate, j === cs.length - 1 ? cadence : basePitch,
           ch.c.line, ch.c.map);
+      // the hype man answers with the line's (parenthetical) in the gap
+      if(ch.c.hype)
+        say(ch.c.hype, at + share * 0.85, 1.05, 0.7, null, null, 0.5, hype);
       off += share;
     });
-    // a quiet ad-lib in the breath at the end of every 4-bar phrase
-    if(p.k % 4 === 3)
+    // a quiet ad-lib in the breath at the end of every phrase — twice as
+    // often in the chorus
+    if(p.k % (inChorus ? 2 : 4) === (inChorus ? 1 : 3))
       say(['yeah', 'uh', 'okay', 'woo'][Math.floor(p.k / 4) % 4],
-          p.at + p.slot - EIGHTH * 0.9, 1.15, 0.65, null, null, 0.35);
+          p.at + p.slot - EIGHTH * 0.9, 1.15, 0.65, null, null, 0.35, hype);
   });
-  if(coldStart){  // the count-in gets a voice
-    say('yo', 0.05, 1, 0.7, null, null, 0.4);
-    say('yo', 0.05 + barSec / 2, 1, 0.7, null, null, 0.4);
+  if(coldStart){  // the hype man counts you in
+    say('yo', 0.4, 1, 0.7, null, null, 0.4, hype);
+    say("let's go", 0.4 + barSec / 2, 1, 0.72, null, null, 0.4, hype);
   }
   rapTimers.push(setTimeout(stopRap, (lead + t + barSec * 0.5) * 1000));
 
