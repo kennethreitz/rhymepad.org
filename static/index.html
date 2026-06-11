@@ -8,8 +8,35 @@
 <meta property="og:title" content="RhymePad">
 <meta property="og:description" content="A scratchpad that color-codes your rhyme schemes as you write. Real phonetic analysis: internal rhymes, slant rhymes, multi-word mosaics. Yes, it knows orange rhymes with door hinge.">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://rhymepad.org">
+<meta property="og:url" content="https://rhymepad.org/">
+<meta property="og:site_name" content="RhymePad">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://rhymepad.org/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="RhymePad — a verse with its rhyme scheme color-coded.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="RhymePad — a scratchpad for poets & rappers">
+<meta name="twitter:description" content="Write lyrics with live phonetic rhyme detection — internal rhymes, slant rhymes, multi-word mosaics, color-coded as you type. Yes, it knows orange rhymes with door hinge.">
+<meta name="twitter:image" content="https://rhymepad.org/og.png">
+<meta name="author" content="Kenneth Reitz">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://rhymepad.org/">
 <meta name="theme-color" content="#14110f">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "RhymePad",
+  "url": "https://rhymepad.org/",
+  "description": "A scratchpad for poets and rappers with live phonetic rhyme detection — internal rhymes, slant rhymes, and multi-word mosaics color-coded as you type.",
+  "applicationCategory": "MusicApplication",
+  "operatingSystem": "Any (web browser)",
+  "browserRequirements": "Requires JavaScript",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "Kenneth Reitz", "url": "https://kennethreitz.org" }
+}
+</script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍊</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -64,9 +91,10 @@
     font-size: 30px;
     letter-spacing: -0.02em;
     color: var(--ink);
+    margin: 0;
   }
   .brand span { color: var(--accent); }
-  .tagline { color: var(--ink-dim); font-size: 12px; letter-spacing: 0.04em; }
+  .tagline { color: var(--ink-dim); font-size: 12px; letter-spacing: 0.04em; margin: 0; }
 
   /* ---- editor side ---- */
   .editor-col { display: flex; flex-direction: column; min-height: 0; gap: 10px; }
@@ -282,8 +310,8 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand">Rhyme<span>Pad</span></div>
-    <div class="tagline">a scratchpad for poets &amp; rappers — real phonetic rhyme detection</div>
+    <h1 class="brand">Rhyme<span>Pad</span></h1>
+    <p class="tagline">a scratchpad for poets &amp; rappers — real phonetic rhyme detection</p>
   </header>
 
   <!-- EDITOR -->

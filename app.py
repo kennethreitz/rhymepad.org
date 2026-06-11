@@ -14,7 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import pronouncing
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from wordfreq import zipf_frequency
@@ -1780,6 +1780,24 @@ def lookup(word: str, mode: str = "rhyme", limit: int = 60):
     multis = multis_for(target, perfect)
     return {"word": w, "mode": mode, "known": True, "words": words,
             "near": near, "rhyme_on": rhyme_on, "multis": multis}
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots() -> Response:
+    body = ("User-agent: *\n"
+            "Allow: /\n"
+            "Sitemap: https://rhymepad.org/sitemap.xml\n")
+    return Response(body, media_type="text/plain")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+def sitemap() -> Response:
+    body = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            '  <url><loc>https://rhymepad.org/</loc>'
+            '<changefreq>weekly</changefreq><priority>1.0</priority></url>\n'
+            '</urlset>\n')
+    return Response(body, media_type="application/xml")
 
 
 app.mount("/", StaticFiles(directory=Path(__file__).parent / "static",
