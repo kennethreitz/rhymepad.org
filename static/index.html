@@ -2167,18 +2167,18 @@ function startRap(){
           ch.c.line, ch.c.map);
       // the hype man answers with the line's (parenthetical) in the gap
       if(ch.c.hype)
-        say(ch.c.hype, at + share * 0.85, 1.05, 0.7, null, null, 0.5, hype);
+        say(ch.c.hype, at + share * 0.85, 1.05, 0.85, null, null, 0.75, hype);
       off += share;
     });
     // a quiet ad-lib in the breath at the end of every phrase — twice as
     // often in the chorus
     if(p.k % (inChorus ? 2 : 4) === (inChorus ? 1 : 3))
       say(['yeah', 'uh', 'okay', 'woo'][Math.floor(p.k / 4) % 4],
-          p.at + p.slot - EIGHTH * 0.9, 1.15, 0.65, null, null, 0.35, hype);
+          p.at + p.slot - EIGHTH * 0.9, 1.15, 0.8, null, null, 0.55, hype);
   });
   if(coldStart){  // the hype man counts you in
-    say('yo', 0.4, 1, 0.7, null, null, 0.4, hype);
-    say("let's go", 0.4 + barSec / 2, 1, 0.72, null, null, 0.4, hype);
+    say('yo', 0.4, 1, 0.85, null, null, 0.6, hype);
+    say("let's go", 0.4 + barSec / 2, 1, 0.87, null, null, 0.6, hype);
   }
   rapTimers.push(setTimeout(stopRap, (lead + t + barSec * 0.5) * 1000));
 
