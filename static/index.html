@@ -306,7 +306,9 @@
   .tempo-row input[type=range] { flex:1; accent-color: var(--accent); }
   .tempo-val { font-variant-numeric: tabular-nums; color: var(--accent-2); min-width: 64px; text-align:right; font-size:13px;}
   .beat-controls { display:flex; gap:8px; margin-top:12px; align-items:center; }
-  .beat-ind { display:flex; gap:6px; justify-content:center; margin-top:12px; }
+  .beat-ind { display:flex; gap:6px; justify-content:center; margin-top:10px; }
+  .transport { margin-bottom: 14px; }
+  .beat-controls { margin-top: 0; }
   .beat-ind span {
     width:9px; height:9px; border-radius:50%;
     background: var(--line); transition: background .05s;
@@ -435,8 +437,14 @@ Double-click any word to look it up on the right."></textarea>
     </div>
 
     <div class="panel-body" id="tab-beats" style="display:none">
-      <div class="beat-grid" id="beatGrid"></div>
       <div class="transport">
+        <div class="beat-controls">
+          <button class="btn primary" id="playBeat">Play</button>
+          <button class="btn" id="stopBeat">Stop</button>
+          <button class="btn" id="tapBtn" title="Tap a few times to set the tempo">Tap</button>
+          <button class="btn" id="rapBtn" title="The browser raps your draft over the beat — one line per bar">Rap it</button>
+        </div>
+        <div class="beat-ind" id="beatInd"><span></span><span></span><span></span><span></span></div>
         <div class="tempo-row">
           <span class="muted">Tempo</span>
           <input type="range" id="tempo" min="60" max="180" value="90">
@@ -447,14 +455,8 @@ Double-click any word to look it up on the right."></textarea>
           <input type="range" id="vol" min="0" max="100" value="70">
           <span class="tempo-val" id="volVal">70%</span>
         </div>
-        <div class="beat-controls">
-          <button class="btn primary" id="playBeat">Play</button>
-          <button class="btn" id="stopBeat">Stop</button>
-          <button class="btn" id="tapBtn" title="Tap a few times to set the tempo">Tap</button>
-          <button class="btn" id="rapBtn" title="The browser raps your draft over the beat — one line per bar">Rap it</button>
-        </div>
-        <div class="beat-ind" id="beatInd"><span></span><span></span><span></span><span></span></div>
       </div>
+      <div class="beat-grid" id="beatGrid"></div>
     </div>
   </aside>
 
