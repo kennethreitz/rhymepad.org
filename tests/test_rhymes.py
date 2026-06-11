@@ -789,3 +789,35 @@ def test_repeated_word_at_line_ends_rhymes():
     group_with(text, "again", "again")  # all three share a colored family
     # but mid-line repetition stays refrain, not a rhyme group
     assert "round" not in highlighted("round and round and round we go\nnothing else")
+
+
+AUDIT_SHOULD = [
+    ("orange", "door hinge"), ("benadryl", "many a pill"),
+    ("antidote", "anecdote"), ("oblivious", "ridiculous"),
+    ("shawty", "naughty"), ("finna", "dinner"), ("tryna", "designer"),
+    ("skrrt", "hurt"), ("bruh", "duh"), ("thang", "bang"),
+    ("Babolats", "cats"), ("Maybach", "way back"), ("Patek", "check"),
+    ("Balmain", "ballgame"), ("guap", "drop"),
+]
+AUDIT_NOT = [
+    ("garbage", "javascript"), ("middle", "unavoidable"),
+    ("orange", "purple"), ("table", "people"), ("quick", "meticulous"),
+]
+
+
+def _pair_rhymes(a, b):
+    res = analyze(Draft(text=f"I got the {a}\nyou know the {b}"))
+    bg = defaultdict(set)
+    for t in res["tokens"]:
+        bg[t["g"]].add(res["lines"][t["l"]][t["s"]:t["e"]].lower())
+    return any(a.lower() in s and b.lower() in s for s in bg.values())
+
+
+def test_audit_famous_rhymes():
+    misses = [(a, b) for a, b in AUDIT_SHOULD if not _pair_rhymes(a, b)]
+    assert not misses, f"audit misses: {misses}"
+
+
+def test_audit_non_rhymes_stay_apart():
+    fps = [(a, b) for a, b in AUDIT_NOT if _pair_rhymes(a, b)]
+    assert not fps, f"audit false positives: {fps}"

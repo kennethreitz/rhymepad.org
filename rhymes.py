@@ -78,8 +78,16 @@ def _norm_r(phones: str) -> str:
 #: corrections for the CMU dict's occasional howlers — the dict entry is
 #: kept as a secondary candidate, the fix leads
 OVERRIDES = {
-    "stasis": "S T EY1 S IH0 S",  # CMU: "STAH-seez"
-    "kinda": "K AY1 N D AH0",     # CMU: "KIH-nda"
+    "stasis": "S T EY1 S IH0 S",   # CMU: "STAH-seez"
+    "kinda": "K AY1 N D AH0",      # CMU: "KIH-nda"
+    # lyric vocabulary g2p mangles
+    "tryna": "T R AY1 N AH0",      # g2p: "treena"
+    "skrrt": "S K ER1 T",          # g2p: "skraart"
+    "skrt": "S K ER1 T",
+    "bruh": "B R AH1",             # g2p: "brew"
+    "maybach": "M EY1 B AE2 K",    # as rapped: "may-back"
+    "balmain": "B AO1 L M EY2 N",  # as rapped: "ball-MAIN"
+    "patek": "P AH0 T EH1 K",      # CMU stresses PAH-tek; rap says pa-TEK
 }
 
 
@@ -111,6 +119,13 @@ def phones_candidates(word: str) -> tuple[str, ...]:
         cands = pronouncing.phones_for_word("w" + w[2:])[:1]
     if not cands and w.endswith("s") and len(w) > 3:
         base = pronouncing.phones_for_word(w[:-1])  # plural of an OOV stem
+        if not base:  # the stem itself may be OOV — g2p guesses stems
+            try:      # far better than it guesses inflected forms
+                g = g2p_phones(w[:-1])
+                if g:
+                    base = [g]
+            except Exception:
+                base = []
         if base:
             voiced = base[0].split()[-1] not in {"P", "T", "K", "F", "TH"}
             cands = [base[0] + (" Z" if voiced else " S")]
@@ -169,6 +184,38 @@ def _tail_vowels(phones: str) -> list[str]:
 
 def _all_vowels(phones: str) -> list[str]:
     return [DIGITS.sub("", p) for p in phones.split() if p[-1].isdigit()]
+
+
+def _tail_syls(phones: str) -> list[str]:
+    """Like _tail_vowels but keeps the stress digits."""
+    pl = phones.split()
+    start = 0
+    for i in range(len(pl) - 1, -1, -1):
+        if pl[i][-1] in "12":
+            start = i
+            break
+    return [p for p in pl[start:] if p[-1].isdigit()]
+
+
+def _all_syls(phones: str) -> list[str]:
+    return [p for p in phones.split() if p[-1].isdigit()]
+
+
+def _iy_reduced(syls: list[str]) -> list[str] | None:
+    """The "happy vowel" elides in flow: MEN-y-a-PILL ~ BEN-a-DRYL.
+    Returns the vowel run with unstressed IY (and other reduced vowels)
+    folded to x and runs of x collapsed — or None if nothing changes."""
+    if not any(p.startswith("IY") and p.endswith("0") for p in syls[1:]):
+        return None
+    out = [DIGITS.sub("", syls[0])]
+    for p in syls[1:]:
+        v = DIGITS.sub("", p)
+        # only UNSTRESSED vowels fold — a stressed IH/AH is a real beat
+        x = p.endswith("0") and (p.startswith("IY") or v in REDUCED)
+        if x and out[-1] == "x":
+            continue  # elided fillers collapse onto the same off-beat
+        out.append("x" if x else v)
+    return out if sum(1 for v in out if v != "x") >= 2 else None
 
 
 def _slant_from_phones(phones: str) -> str | None:
@@ -387,11 +434,21 @@ def multi_keys(word: str) -> tuple[str, ...]:
             if p[-1] == "1":
                 anchors.add(i)
                 break
-        for a in anchors or {0}:
-            vs = [DIGITS.sub("", p) for p in pl[a:] if p[-1].isdigit()]
+        anchors.add(0)  # the front syllable always anchors: BALL-game
+        for a in anchors:
+            syls = [p for p in pl[a:] if p[-1].isdigit()]
+            vs = [DIGITS.sub("", p) for p in syls]
             k = _multi_key(vs)
             if k:
                 out.append(k)
+            # the "happy vowel": unstressed IY reduces in flow, so
+            # ob-LIV-i-ous (IH-IY-x) can meet ri-DIC-u-lous (IH-x)
+            if any(p.startswith("IY") and p.endswith("0") for p in syls[1:]):
+                vs2 = [vs[0]] + ["x" if s.startswith("IY") and s.endswith("0")
+                                 else v for v, s in zip(vs[1:], syls[1:])]
+                k = _multi_key(vs2)
+                if k:
+                    out.append(k)
             k2 = _m2_key(pl[a:])  # joinable by consonant-supported phrases
             if k2:
                 out.append(k2)
@@ -573,6 +630,7 @@ def analyze_text(text: str) -> dict:
                 "word": a["word"].lower() + " " + b["word"].lower(),
                 "is_end": b["is_end"], "sid": a["sid"], "gid": None,
                 "slant": False, "vowels": _tail_vowels(pa) + _all_vowels(pb),
+                "v2": _iy_reduced(_tail_syls(pa) + _all_syls(pb)),
                 "rime": DIGITS.sub("", " ".join(pl[start:] + pb.split())),
                 # a phrase touching a stopword ("were up") may still match
                 # perfectly, but never competes in the vowel-only passes
@@ -600,7 +658,18 @@ def analyze_text(text: str) -> dict:
             if not (pa and pb and pc):
                 continue
             tail_vowels = _all_vowels(pb) + _all_vowels(pc)
-            if not any(v not in REDUCED for v in tail_vowels):
+            full_tail = any(v not in REDUCED for v in tail_vowels)
+            if not full_tail:
+                # a stressed content word in the tail counts even when
+                # its vowel class is reducible: "many a PILL" (IH1) is a
+                # beat; "Sleep is the" (all stopwords) still proves nothing
+                for w_, ph_ in ((b, pb), (c, pc)):
+                    if (w_["word"].lower() not in STOPWORDS
+                            and any(s[-1] in "12" for s in ph_.split()
+                                    if s[-1].isdigit())):
+                        full_tail = True
+                        break
+            if not full_tail:
                 continue  # the mosaic must span words: "mean TO it" does,
                           # "methamphetamine with the" is just its anchor
             vowels = _tail_vowels(pa) + tail_vowels
@@ -617,6 +686,7 @@ def analyze_text(text: str) -> dict:
                 "word": " ".join(w["word"].lower() for w in (a, b, c)),
                 "is_end": c["is_end"], "sid": a["sid"], "gid": None,
                 "slant": False, "vowels": vowels,
+                "v2": _iy_reduced(_tail_syls(pa) + _all_syls(pb) + _all_syls(pc)),
                 "rime": DIGITS.sub(
                     "", " ".join(pl[start:] + pb.split() + pc.split())),
                 "weak": False,
@@ -832,6 +902,11 @@ def analyze_text(text: str) -> dict:
             # anchor + schwa-tails ("Sleep is the") prove nothing
             if sum(v != "x" for v in key[2:].split()) < 2:
                 continue
+        pkeys = [key]
+        if p.get("v2"):
+            k2 = _multi_key(p["v2"])
+            if k2 and k2 != key:
+                pkeys.append(k2)
         if full < 2 and not key.startswith("m2:"):
             # a schwa-heavy run can't barge into a word family ("Two
             # bitches" -> the Tuna chain), but parallel phrases may pair
@@ -847,7 +922,8 @@ def analyze_text(text: str) -> dict:
             # ties somewhere beyond its anchor's own family (four-inch
             # joining the orange clan; "pass the time" reaching the
             # group where mastermind advertises its AE..AY run)
-            gi = group_by_multi.get((p["sid"], key))
+            gi = next((g for g in (group_by_multi.get((p["sid"], k))
+                                   for k in pkeys) if g is not None), None)
             if gi is not None and gi != a_gi:
                 raw_groups[gi]["toks"].append(p)
                 p["slant"] = True
@@ -855,9 +931,22 @@ def analyze_text(text: str) -> dict:
             else:
                 # or if it can seed a family with non-mirror siblings
                 # (mean to it / seen do it / theme music)
-                by_multi[(p["sid"], key)].append(p)
+                for k in pkeys:
+                    by_multi[(p["sid"], k)].append(p)
             continue
-        attach_or_collect(p, key, by_multi, group_by_multi)
+        joined = False
+        for k in pkeys:
+            gi = group_by_multi.get((p["sid"], k))
+            if gi is not None and any(abs(m["line"] - p["line"]) <= 8
+                                      for m in raw_groups[gi]["toks"]):
+                raw_groups[gi]["toks"].append(p)
+                p["slant"] = True
+                grouped.add(id(p))
+                joined = True
+                break
+        if not joined:
+            for k in pkeys:
+                by_multi[(p["sid"], k)].append(p)
 
     for (sid, key), toks in by_par.items():
         toks = sorted((t for t in toks if id(t) not in grouped),
