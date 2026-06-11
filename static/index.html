@@ -2033,17 +2033,29 @@ function hypeVoice(main){
   return main;
 }
 let voiceCal = 0;  // measured syllables/sec at rate 1, per voice
+let voiceLat = 0;  // measured speak()->sound latency, per voice (sec)
 function calibrateVoice(voice){
   const key = 'rhymepad.cal.' + (voice ? voice.name : 'default');
+  const lkey = 'rhymepad.lat.' + (voice ? voice.name : 'default');
   const saved = parseFloat(localStorage.getItem(key));
+  voiceLat = parseFloat(localStorage.getItem(lkey)) || 0;
   if(saved > 1 && saved < 12){ voiceCal = saved; return; }
   // a silent 12-syllable phrase, timed — every platform speaks at its
-  // own pace, so we measure instead of guessing
+  // own pace, so we measure instead of guessing. The speak->onstart
+  // gap is the engine's spin-up; we pre-subtract it from every cue.
   const u = new SpeechSynthesisUtterance('one two three four five six seven eight nine ten eleven');
   if(voice) u.voice = voice;
   u.volume = 0; u.rate = 1;
+  const tSpeak = performance.now();
   let t0 = 0;
-  u.onstart = ()=>{ t0 = performance.now(); };
+  u.onstart = ()=>{
+    t0 = performance.now();
+    const lat = (t0 - tSpeak) / 1000;
+    if(lat > 0.005 && lat < 0.6){
+      voiceLat = lat;
+      localStorage.setItem(lkey, lat.toFixed(3));
+    }
+  };
   u.onend = ()=>{
     if(!t0) return;
     const sec = (performance.now() - t0) / 1000;
@@ -2185,7 +2197,7 @@ function startRap(){
         };
       }
       speechSynthesis.speak(u);
-    }, at * 1000));
+    }, Math.max(0, (at - voiceLat) * 1000)));
   };
 
   plan.forEach(p=>{ p.at += lead; });
@@ -2256,20 +2268,34 @@ function startRap(){
     if(p.endG != null && p.prevEndG != null)
       cadence = resolving ? 0.7 : 0.86;
     if(lastLine) cadence = 0.66;  // stick the landing
+    // not every bar enters square on the one: alternate lines come in
+    // a 16th late (the off-beat entry real flows live on)
+    const entryPush = (!inChorus && flowName !== 'burst' && p.k % 2 === 1)
+      ? barSec / 16 : 0;
     let off = 0;
     cs.forEach((ch, j)=>{
+      const isLast = j === cs.length - 1;
       const share = usable * ch.w / wtotal;
-      let at = p.at + flow.push * barSec
+      let at = p.at + flow.push * barSec + entryPush
              + Math.round(off / GRID) * GRID;  // lock to this flow's grid
-      const rate = Math.min(1.6, Math.max(0.7,
+      let rate = Math.min(1.6, Math.max(0.7,
         chSylRate(p.syl, ch.w, wtotal, share) * flow.rateMul * (lastLine ? 0.9 : 1)));
+      // the setup-punch: a short final chunk (usually the rhyme word,
+      // after the rhyme cut) waits one grid step, then lands unhurried
+      if(isLast && cs.length > 1 && ch.w <= 4){
+        at += GRID;
+        rate = Math.max(0.7, rate * 0.95);
+      }
       // anacrusis: leading unstressed syllables start early, so the
       // chunk's first STRESS lands on the gridpoint
       const lead0 = leadingUnstressed(ch.c.line, ch.c.map[0]);
       if(lead0 > 0) at = Math.max(p.at, at - Math.min(GRID, lead0 / (SYL_PER_SEC * rate)));
+      // declination: punch the bar's entry, settle chunk by chunk into
+      // the cadence — the natural downhill of a spoken line
+      const pitch = isLast ? cadence
+        : Math.max(0.72, basePitch + 0.03 - j * 0.02);
       if(ch.c.text)
-        say(ch.c.text, at, rate, j === cs.length - 1 ? cadence : basePitch,
-            ch.c.line, ch.c.map);
+        say(ch.c.text, at, rate, pitch, ch.c.line, ch.c.map);
       // the hype man answers with the line's (parenthetical) — in the
       // gap after the main vocal, or owning the slot on a full-paren line
       if(ch.c.hype)
