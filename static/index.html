@@ -2262,19 +2262,6 @@ function startRap(){
             null, null, 0.75, hype);
       off += share;
     });
-    // the hype man echoes the landed rhyme on resolving couplet lines
-    const es = endSpan[p.l.i];
-    if(resolving && es){
-      const word = editorLines[p.l.i].slice(es.s, es.e);
-      if(word) say(word, p.at + usable + GRID * 0.3, 1, 0.82, null, null, 0.55, hype);
-    }
-    if(lastLine)
-      say('woo', p.at + p.slot + 0.15, 1.1, 0.85, null, null, 0.6, hype);
-    // a quiet ad-lib in the breath at the end of every phrase — twice as
-    // often in the chorus
-    if(p.k % (inChorus ? 2 : 4) === (inChorus ? 1 : 3))
-      say(['yeah', 'uh', 'okay', 'woo'][Math.floor(p.k / 4) % 4],
-          p.at + p.slot - EIGHTH * 0.9, 1.15, 0.8, null, null, 0.55, hype);
   });
   if(coldStart){  // the hype man counts you in
     say('yo', 0.4, 1, 0.85, null, null, 0.6, hype);
