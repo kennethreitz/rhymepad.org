@@ -1,0 +1,12 @@
+LICENSE
+README.md
+app.py
+pyproject.toml
+rhymes.py
+rhymepad.egg-info/PKG-INFO
+rhymepad.egg-info/SOURCES.txt
+rhymepad.egg-info/dependency_links.txt
+rhymepad.egg-info/entry_points.txt
+rhymepad.egg-info/requires.txt
+rhymepad.egg-info/top_level.txt
+tests/test_rhymes.py

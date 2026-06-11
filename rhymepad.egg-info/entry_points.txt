@@ -1,0 +1,2 @@
+[console_scripts]
+rhymes = rhymes:main

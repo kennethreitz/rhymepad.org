@@ -1780,3 +1780,135 @@ def warm() -> None:
         pass
     get_slant_index()
     get_multi_indexes()
+
+
+# --------------------------------------------------------------------------
+# CLI — the visual language, in a terminal
+# --------------------------------------------------------------------------
+
+PALETTE = ["#e8814a", "#4ea3e8", "#6fd08c", "#d46fb8",
+           "#e8c54a", "#9b7ce8", "#e85a5a", "#46cabf",
+           "#c0d44e", "#ee5d8f", "#6f8bf2", "#8fe85a",
+           "#5ad8d8", "#e0985a", "#b88ce8", "#56c878"]
+_INK = (230, 222, 210)
+
+
+def _ansi_fg(rgb, underline=False):
+    u = "\x1b[4m" if underline else ""
+    return f"\x1b[38;2;{rgb[0]};{rgb[1]};{rgb[2]}m{u}"
+
+
+def render_ansi(text: str) -> str:
+    """Color a draft for the terminal: family hue tints the rhyming
+    words, brightness follows strength, line endings get an underline,
+    unanswered endings go gray."""
+    res = analyze_text(text)
+    lines = res["lines"]
+    pal = [tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) for h in PALETTE]
+    gcolor = {g["id"]: pal[g["color"] % len(pal)] for g in res["groups"]}
+    by_line: dict[int, list] = defaultdict(list)
+    for t in res["tokens"]:
+        if not t["ph"]:  # words carry the color; phrase fills don't map to fg
+            by_line[t["l"]].append(t)
+    open_by: dict[int, list] = defaultdict(list)
+    for o in res.get("open", []):
+        open_by[o["l"]].append(o)
+
+    out = []
+    for i, line in enumerate(lines):
+        s = line.lstrip()
+        if s.startswith("#"):
+            out.append(f"\x1b[1;90m{line}\x1b[0m")
+            continue
+        if s.startswith("["):
+            out.append(f"\x1b[90m{line}\x1b[0m")
+            continue
+        spans = []  # (start, end, ansi-prefix)
+        for t in sorted(by_line.get(i, []), key=lambda t: t["s"]):
+            st = t.get("str", 1.0)
+            base = gcolor[t["g"]]
+            mix = 0.45 + 0.55 * st  # strength -> vividness
+            rgb = tuple(round(_INK[k] + (base[k] - _INK[k]) * mix)
+                        for k in range(3))
+            spans.append((t["s"], t["e"], _ansi_fg(rgb, underline=t["end"])))
+        for o in open_by.get(i, []):
+            spans.append((o["s"], o["e"], "\x1b[2;37m\x1b[4m"))
+        spans.sort()
+        buf, pos = [], 0
+        for s0, e0, pre in spans:
+            if s0 < pos:
+                continue
+            buf.append(line[pos:s0])
+            buf.append(f"{pre}{line[s0:e0]}\x1b[0m")
+            pos = e0
+        buf.append(line[pos:])
+        out.append("".join(buf))
+    return "\n".join(out)
+
+
+def density(text: str) -> dict:
+    """How rhyme-dense is a verse? The numbers behind the colors."""
+    res = analyze_text(text)
+    stop = STOPWORDS
+    content = 0
+    for i, line in enumerate(res["lines"]):
+        s = line.strip()
+        if not s or s.startswith(("#", "[")):
+            continue
+        content += sum(1 for m in WORD_RE.finditer(line)
+                       if m.group(0).lower() not in stop)
+    words = [t for t in res["tokens"] if not t["ph"]]
+    fams = Counter(t["g"] for t in res["tokens"])
+    return {
+        "content_words": content,
+        "rhyming_words": len(words),
+        "internal": sum(1 for t in words if not t["end"]),
+        "phrases": sum(1 for t in res["tokens"] if t["ph"]),
+        "families": sum(1 for c in fams.values() if c >= 2),
+        "largest_family": max(fams.values(), default=0),
+        "density": round(len(words) / content, 3) if content else 0.0,
+    }
+
+
+def main(argv=None) -> int:
+    import argparse
+    import json as _json
+    import sys
+
+    ap = argparse.ArgumentParser(
+        prog="rhymes",
+        description="Phoneme-aware rhyme analysis. Same engine as rhymepad.org.")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p_an = sub.add_parser("analyze", help="color-code a draft in the terminal")
+    p_an.add_argument("file", nargs="?", default="-",
+                      help="lyrics file (default: stdin)")
+    p_js = sub.add_parser("json", help="full analysis as JSON")
+    p_js.add_argument("file", nargs="?", default="-")
+    p_de = sub.add_parser("density", help="rhyme-density stats (1+ files)")
+    p_de.add_argument("files", nargs="+")
+    args = ap.parse_args(argv)
+
+    def read(path):
+        if path == "-":
+            return sys.stdin.read()
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+
+    if args.cmd == "analyze":
+        print(render_ansi(read(args.file)))
+    elif args.cmd == "json":
+        print(_json.dumps(analyze_text(read(args.file)), ensure_ascii=False))
+    elif args.cmd == "density":
+        rows = [(path, density(read(path))) for path in args.files]
+        rows.sort(key=lambda r: -r[1]["density"])
+        hdr = f"{'file':<28} {'density':>7} {'words':>6} {'internal':>8} {'families':>8} {'largest':>7}"
+        print(hdr)
+        print("-" * len(hdr))
+        for path, d in rows:
+            print(f"{path[:28]:<28} {d['density']:>7.0%} {d['rhyming_words']:>6}"
+                  f" {d['internal']:>8} {d['families']:>8} {d['largest_family']:>7}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

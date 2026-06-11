@@ -1,3 +1,28 @@
+Metadata-Version: 2.4
+Name: rhymepad
+Version: 0.1.0
+Summary: A scratchpad for poets & rappers — phoneme-aware rhyme-scheme detection.
+Author-email: Kenneth Reitz <me@kennethreitz.org>
+License-Expression: ISC
+Project-URL: Homepage, https://rhymepad.org
+Project-URL: Source, https://github.com/kennethreitz/rhymepad.org
+Keywords: rhyme,lyrics,poetry,rap,phonetics,cmudict
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Other Audience
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Artistic Software
+Classifier: Topic :: Text Processing :: Linguistic
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: fastapi>=0.110
+Requires-Dist: uvicorn>=0.29
+Requires-Dist: pronouncing>=0.2
+Requires-Dist: wordfreq>=3.0
+Requires-Dist: g2p-en>=2.1.0
+Requires-Dist: pillow>=12.2.0
+Dynamic: license-file
+
 # RhymePad
 
 A scratchpad for poets & rappers that does **live phonetic rhyme
@@ -78,17 +103,6 @@ rhymes.word_data("orange")                  # phonetic anatomy
 ```
 
 `app.py` is just the FastAPI shell around it.
-
-There's a CLI too:
-
-```console
-$ rhymes analyze song.txt     # color-coded rhyme families, in your terminal
-$ rhymes density *.txt        # which verse is the most rhyme-dense?
-$ rhymes json song.txt        # the full analysis payload
-```
-
-(`uv run rhymes …` inside this repo, or `pip install rhymepad` once
-it's on PyPI.)
 
 ## API
 

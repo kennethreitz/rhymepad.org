@@ -2,9 +2,18 @@
 name = "rhymepad"
 version = "0.1.0"
 description = "A scratchpad for poets & rappers — phoneme-aware rhyme-scheme detection."
+readme = "README.md"
 license = "ISC"
 authors = [{ name = "Kenneth Reitz", email = "me@kennethreitz.org" }]
 requires-python = ">=3.11"
+keywords = ["rhyme", "lyrics", "poetry", "rap", "phonetics", "cmudict"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Other Audience",
+    "Programming Language :: Python :: 3",
+    "Topic :: Artistic Software",
+    "Topic :: Text Processing :: Linguistic",
+]
 dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
@@ -13,6 +22,20 @@ dependencies = [
     "g2p-en>=2.1.0",
     "pillow>=12.2.0",
 ]
+
+[project.urls]
+Homepage = "https://rhymepad.org"
+Source = "https://github.com/kennethreitz/rhymepad.org"
+
+[project.scripts]
+rhymes = "rhymes:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["rhymes", "app"]
 
 [dependency-groups]
 dev = [
