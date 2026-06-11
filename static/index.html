@@ -2135,14 +2135,14 @@ function startRap(){
         map.push(base + off + q);
         text += c;
       }
-      return {text: text.trim() ? text : rc, map, line: p.l.i,
+      return {text: text.trim(), map, line: p.l.i,
               hype: hypeText.trim()};
-    }).filter(c=>c.text.trim());
+    }).filter(c=>c.text || c.hype);
     if(!chunks.length) return;
     // clusters only APPORTION the line's true syllable count across
     // chunks — silent e's can't inflate the speed that way
     const cs = chunks.map(c=>({
-      c, w: Math.max(1, (c.text.match(/[aeiouy]+/gi) || []).length)}));
+      c, w: Math.max(1, ((c.text || c.hype).match(/[aeiouy]+/gi) || []).length)}));
     const wtotal = cs.reduce((a, b)=>a + b.w, 0);
     const usable = p.slot * 7 / 8;   // breathe on the last eighth
     // the energy arc: pitch climbs gently through each 4-bar phrase;
@@ -2163,11 +2163,14 @@ function startRap(){
       // chunk's first STRESS lands on the gridpoint
       const lead0 = leadingUnstressed(ch.c.line, ch.c.map[0]);
       if(lead0 > 0) at = Math.max(p.at, at - Math.min(EIGHTH, lead0 / (SYL_PER_SEC * rate)));
-      say(ch.c.text, at, rate, j === cs.length - 1 ? cadence : basePitch,
-          ch.c.line, ch.c.map);
-      // the hype man answers with the line's (parenthetical) in the gap
+      if(ch.c.text)
+        say(ch.c.text, at, rate, j === cs.length - 1 ? cadence : basePitch,
+            ch.c.line, ch.c.map);
+      // the hype man answers with the line's (parenthetical) — in the
+      // gap after the main vocal, or owning the slot on a full-paren line
       if(ch.c.hype)
-        say(ch.c.hype, at + share * 0.85, 1.05, 0.85, null, null, 0.75, hype);
+        say(ch.c.hype, ch.c.text ? at + share * 0.85 : at, 1.05, 0.85,
+            null, null, 0.75, hype);
       off += share;
     });
     // a quiet ad-lib in the breath at the end of every phrase — twice as
@@ -2178,7 +2181,7 @@ function startRap(){
   });
   if(coldStart){  // the hype man counts you in
     say('yo', 0.4, 1, 0.85, null, null, 0.6, hype);
-    say("let's go", 0.4 + barSec / 2, 1, 0.87, null, null, 0.6, hype);
+    say('yo', 0.4 + barSec / 2, 1, 0.85, null, null, 0.6, hype);
   }
   rapTimers.push(setTimeout(stopRap, (lead + t + barSec * 0.5) * 1000));
 
