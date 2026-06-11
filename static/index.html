@@ -2068,12 +2068,17 @@ function startRap(){
   let lines = editor.value.split('\n')
     .map((raw, i)=>({raw: raw.trim(), i}))
     .filter(l=>l.raw && !/^[#\[]/.test(l.raw));
-  // a selection raps just the selected lines
+  // a selection raps just the selected lines; otherwise the caret is
+  // the starting point (parked at the very start/end = whole draft)
   if(editor.selectionStart !== editor.selectionEnd){
     const a = editor.value.slice(0, editor.selectionStart).split('\n').length - 1;
     const b = editor.value.slice(0, editor.selectionEnd).split('\n').length - 1;
     const sel = lines.filter(l=>l.i >= a && l.i <= b);
     if(sel.length) lines = sel;
+  }else if(editor.selectionStart > 0 && editor.selectionStart < editor.value.length){
+    const c = editor.value.slice(0, editor.selectionStart).split('\n').length - 1;
+    const from = lines.filter(l=>l.i >= c);
+    if(from.length && from.length < lines.length) lines = from;
   }
   if(!lines.length) return;
   const bpm = userTempo || 90;
