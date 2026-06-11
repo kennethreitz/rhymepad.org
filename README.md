@@ -1,10 +1,15 @@
 # RhymePad
 
-A scratchpad for poets & rappers. Write in the pad; rhymes are detected
-phonetically (CMU Pronouncing Dictionary) and color-coded as you type —
-end rhymes, **internal rhymes**, and slant rhymes included. Comes with a
-rhyme/synonym lookup, draggable stanza reordering, and synthesized beats
-with adjustable tempo.
+A scratchpad for poets & rappers that does **live phonetic rhyme
+analysis** of whatever you're writing. Type or paste lyrics into the pad
+and the rhyme structure is color-coded as you type — end rhymes,
+**internal rhymes**, slant rhymes, multisyllabic and multi-word rhymes —
+using the actual *sounds* (CMU Pronouncing Dictionary + a g2p phoneme
+fallback), not the spelling.
+
+Yes, it knows **orange** rhymes with **door hinge**.
+
+Live at <https://rhymepad.org>.
 
 ## Run
 
@@ -14,28 +19,60 @@ $ uv run uvicorn app:app --reload
 
 Then open <http://127.0.0.1:8000>.
 
+## The visual language
+
+- **Color = which sound.** Every rhyme family gets its own hue.
+- **Brightness = rhyme strength, per word.** Perfect rhymes blaze, slant
+  rhymes sit back, consonance fainter still — and within a family the
+  perfect anchors out-glow the loose slant attachments.
+- **A faint underline marks the rhyming tail** of a word (under `ight`
+  in `tonight`), so you see exactly *where* the rhyme lands.
+- **Gray fill = a dead line ending** that rhymes nothing.
+- **Dotted gold = a near-miss** — a dead ending that's one phoneme from
+  rhyming with another ending (e.g. `hand`/`bond`). A tiny edit locks it.
+- **Hover any word** and its whole family brightens across the page.
+
+Toggles for **rhyme · alliteration · rhythm** (syllable-emphasis dots,
+"sheet music for your flow"). Hovering a word also names its family in
+the readout. Everything you see exports to a pixel-matching **PNG**.
+
 ## How rhyme detection works
 
-- Every word is mapped to its CMU phonemes (`pronouncing`), with
-  lyric-friendly fallbacks (`runnin'` → `running`, possessives, and a
-  spelling heuristic for made-up words).
+Every word is mapped to its CMU phonemes (`pronouncing`), with
+lyric-friendly fallbacks (`runnin'` → `running`, possessives, made-up
+words via `g2p-en`).
+
 - **Perfect rhymes** share everything from the last stressed vowel on
-  (`tonight` / `light` / `flight` → `AY T`). These are matched anywhere
-  in a line — that's the internal rhyme detection.
-- **Slant rhymes** share just the vowel sounds from the last stressed
-  vowel (`hold` / `coal`). Applied to line endings that didn't find a
-  perfect match.
-- Same color = same sound. Underline = line-ending rhyme (the stanza's
-  a/b/a/b scheme); soft glow only = internal rhyme.
+  (`tonight` / `light` / `flight` → `AY T`). Matched *anywhere* in a
+  line — that's the internal-rhyme detection.
+- **Slant rhymes** share just the vowel run (`hold` / `coal`).
+- **Multisyllabic & multi-word mosaics** — `placement of creation`,
+  `orange` / `door hinge` — match across word boundaries.
+- **Consonance** catches shared vowel+coda endings (`bliss` / `exist`).
+
+The engine is taste-tuned toward *what a listener actually hears*:
+rhymes don't cross stanza breaks, vowel families stay local, repeated
+refrains are muted, and dialect mergers (NEAR vowel, cot-caught, nasal
+and sibilant codas) are folded in. It deliberately rejects naive
+vowel-matches — `garbage`/`javascript`, `middle`/`unavoidable`, and
+`smell like a` do *not* rhyme, even though a coarser engine would link
+them.
+
+`( parentheticals )` are real lyrics; inline `(ad-libs)` rhyme
+internally but never claim the line-ending slot. Lines starting with
+`#` (your notes) or `[` (section headers) are skipped.
 
 ## API
 
-- `POST /api/analyze` `{"text": "..."}` → token spans, rhyme groups,
-  per-stanza schemes, per-line meter
+- `POST /api/analyze` `{"text": "..."}` → token spans, rhyme groups
+  (with family strength), per-stanza schemes, per-line meter,
+  alliteration, near-misses, and unanswered endings
 - `GET /api/lookup?word=light&mode=rhyme|near|syn` → frequency-ranked
-  rhymes / near rhymes (by syllable count) and WordNet synonyms (by
-  part of speech)
+  rhymes / near rhymes (by syllable count) and WordNet synonyms
+- `GET /api/word?word=...` → pronunciation, senses, homophones
 
-Dictionary definitions in the UI come from the free
-[dictionaryapi.dev](https://dictionaryapi.dev/); everything else is
-served locally.
+Everything is served locally — no external dictionary calls.
+
+## License
+
+ISC. See [LICENSE](LICENSE).
