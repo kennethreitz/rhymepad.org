@@ -104,6 +104,17 @@ rhymes.word_data("orange")                  # phonetic anatomy
 
 `app.py` is just the FastAPI shell around it.
 
+There's a CLI too:
+
+```console
+$ rhymes analyze song.txt     # color-coded rhyme families, in your terminal
+$ rhymes density *.txt        # which verse is the most rhyme-dense?
+$ rhymes json song.txt        # the full analysis payload
+```
+
+(`uv run rhymes …` inside this repo, or `pip install rhymepad` once
+it's on PyPI.)
+
 ## API
 
 - `POST /api/analyze` `{"text": "..."}` → token spans, rhyme groups

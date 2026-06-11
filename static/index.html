@@ -306,7 +306,7 @@
   .tempo-row input[type=range] { flex:1; accent-color: var(--accent); }
   .tempo-val { font-variant-numeric: tabular-nums; color: var(--accent-2); min-width: 64px; text-align:right; font-size:13px;}
   .beat-controls { display:flex; gap:8px; margin-top:12px; align-items:center; }
-  .beat-ind { display:flex; gap:6px; margin-left:auto; }
+  .beat-ind { display:flex; gap:6px; justify-content:center; margin-top:12px; }
   .beat-ind span {
     width:9px; height:9px; border-radius:50%;
     background: var(--line); transition: background .05s;
@@ -451,8 +451,9 @@ Double-click any word to look it up on the right."></textarea>
           <button class="btn primary" id="playBeat">Play</button>
           <button class="btn" id="stopBeat">Stop</button>
           <button class="btn" id="tapBtn" title="Tap a few times to set the tempo">Tap</button>
-          <div class="beat-ind" id="beatInd"><span></span><span></span><span></span><span></span></div>
+          <button class="btn" id="rapBtn" title="The browser raps your draft over the beat — one line per bar">Rap it</button>
         </div>
+        <div class="beat-ind" id="beatInd"><span></span><span></span><span></span><span></span></div>
       </div>
     </div>
   </aside>
@@ -1909,7 +1910,108 @@ function stopBeat(){
   document.getElementById('playBeat').textContent='Play';
 }
 document.getElementById('playBeat').addEventListener('click', startBeat);
-document.getElementById('stopBeat').addEventListener('click', stopBeat);
+document.getElementById('stopBeat').addEventListener('click', ()=>{ stopBeat(); stopRap(); });
+
+/* ---- Rap it: speechSynthesis flows the draft over the beat ----------
+   One lyric line per bar. Each line's speech rate is fitted from its
+   syllable count so it lands inside its bar — sparse bars drawl,
+   dense bars hustle. It will absolutely sound like a robot. That is
+   the charm. */
+let rapTimers = [];
+let rapping = false;
+const rapBtn = document.getElementById('rapBtn');
+
+function rapVoice(){
+  const vs = speechSynthesis.getVoices().filter(v=>v.lang.startsWith('en'));
+  return vs.find(v=>/Aaron|Daniel|Samantha|Google US/i.test(v.name)) || vs[0] || null;
+}
+
+function stopRap(){
+  rapping = false;
+  rapTimers.forEach(clearTimeout); rapTimers = [];
+  try{ speechSynthesis.cancel(); }catch(e){}
+  rapBtn.textContent = 'Rap it';
+}
+
+function startRap(){
+  if(rapping){ stopRap(); return; }
+  const lines = editor.value.split('\n')
+    .map((raw, i)=>({raw: raw.trim(), i}))
+    .filter(l=>l.raw && !/^[#\[]/.test(l.raw));
+  if(!lines.length) return;
+  if(!playing) startBeat();          // no a-cappella surprises
+  rapping = true;
+  rapBtn.textContent = 'Stop rap';
+  const bpm = userTempo || 90;
+  const barSec = (60 / bpm) * 4;
+  const voice = rapVoice();
+  const sylOf = l=>{
+    const m = analysis && analysis.lines[l.i] === editor.value.split('\n')[l.i]
+      && analysis.meter && analysis.meter.find(x=>x.l===l.i);
+    if(m) return m.syl;
+    return Math.max(2, (l.raw.match(/[aeiouy]+/gi) || []).length);  // rough
+  };
+  // flow planning: each line claims half a bar, one bar, or two bars —
+  // whichever lets the voice stay nearest its natural rate. Dense lines
+  // go halftime (two bars); sparse ones double-time (packed two to a bar).
+  const SYL_PER_SEC = 4.3;  // TTS at rate 1 really does ~4.3 syl/sec
+  const EIGHTH = barSec / 8;
+  let t = 0;
+  const plan = lines.map(l=>{
+    const syl = sylOf(l);
+    const ideal = syl / SYL_PER_SEC;               // seconds at rate 1
+    let bars = 1, bestDist = Infinity;
+    for(const b of [0.5, 1, 2]){
+      const usable = b * barSec * 7 / 8;           // the breath is real time
+      const r = ideal / usable;
+      // overspeed is penalized: when torn, rap leans back, never sprints
+      const d = Math.abs(Math.log(r)) * (r > 1 ? 1.35 : 1);
+      if(d < bestDist){ bestDist = d; bars = b; }
+    }
+    const at = t;
+    t += bars * barSec;
+    return {l, at, syl, slot: bars * barSec};
+  });
+
+  const say = (text, at, rate, pitch)=>{
+    rapTimers.push(setTimeout(()=>{
+      if(!rapping) return;
+      const u = new SpeechSynthesisUtterance(text);
+      if(voice) u.voice = voice;
+      u.rate = rate; u.pitch = pitch;
+      speechSynthesis.speak(u);
+    }, at * 1000));
+  };
+
+  plan.forEach(p=>{
+    // breath chunks: split at punctuation, onsets quantized to the 8th-
+    // note grid, the bar's last 8th left empty to breathe, and the final
+    // chunk of every line dropping pitch — the cadence
+    const clean = p.l.raw.replace(/[\[\]()*_#"]/g, '');
+    const chunks = clean.split(/(?<=[,;:.!?\u2014\u2013])\s+/)
+      .map(s=>s.trim()).filter(Boolean);
+    if(!chunks.length) return;
+    // clusters only APPORTION the line's true syllable count across
+    // chunks — silent e's can't inflate the speed that way
+    const cs = chunks.map(c=>({
+      c, w: Math.max(1, (c.match(/[aeiouy]+/gi) || []).length)}));
+    const wtotal = cs.reduce((a, b)=>a + b.w, 0);
+    const usable = p.slot * 7 / 8;   // breathe on the last eighth
+    let off = 0;
+    cs.forEach((ch, j)=>{
+      const share = usable * ch.w / wtotal;
+      const chSyl = p.syl * ch.w / wtotal;
+      const at = p.at + Math.round(off / EIGHTH) * EIGHTH;  // lock to the grid
+      const rate = Math.min(1.5, Math.max(0.7, chSyl / SYL_PER_SEC / share));
+      say(ch.c, at, rate, j === cs.length - 1 ? 0.78 : 0.92);
+      off += share;
+    });
+  });
+  rapTimers.push(setTimeout(stopRap, (t + barSec * 0.5) * 1000));
+}
+rapBtn.addEventListener('click', startRap);
+if('speechSynthesis' in window) speechSynthesis.getVoices();  // warm the list
+else rapBtn.hidden = true;
 
 document.addEventListener('keydown', e=>{
   if(!(e.metaKey || e.ctrlKey)) return;
