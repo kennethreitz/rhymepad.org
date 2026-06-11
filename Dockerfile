@@ -13,13 +13,14 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-COPY app.py ./
+COPY app.py rhymes.py ./
 COPY static ./static
 
 # Pre-warm NLTK data so g2p-en and WordNet never download at request time
-RUN uv run python -c "import nltk;\
+# (--no-sync: use the env built above; don't try to install the project)
+RUN uv run --no-sync python -c "import nltk;\
 [nltk.download(p, quiet=True) for p in ('averaged_perceptron_tagger','averaged_perceptron_tagger_eng','cmudict','wordnet','omw-1.4')]" || true
 
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "--no-sync", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
