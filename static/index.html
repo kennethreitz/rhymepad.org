@@ -1890,12 +1890,19 @@ function scheduler(){
   const secPer16 = (60/userTempo)/4;
   while(nextTime < actx.currentTime + 0.1){
     const s = step % 16;
+    const bar = Math.floor(step / 16);
     const swing = (s%2===1) ? secPer16 * (p.swing||0) : 0;
     const t = nextTime + swing;
-    if(p.kick.includes(s)) kick(t);
-    if(p.snare.includes(s)){ snare(t); if(p.clap) clap(t); }
-    if(p.hat.includes(s)) hat(t);
-    if(p.ohat && p.ohat.includes(s)) ohat(t);
+    // fills: a two-hit pickup closes every 4th bar; a full snare roll
+    // (with the hats dropped out) closes every 8th
+    const bigFill = bar % 8 === 7 && s >= 12;
+    const lilFill = bar % 4 === 3 && (s === 14 || s === 15);
+    if(p.kick.includes(s) && !bigFill) kick(t);
+    if((p.snare.includes(s) && !bigFill) || bigFill || lilFill){
+      snare(t); if(p.clap && p.snare.includes(s)) clap(t);
+    }
+    if(p.hat.includes(s) && !bigFill) hat(t);
+    if(p.ohat && p.ohat.includes(s) && !bigFill) ohat(t);
     if(p.bass) p.bass.forEach(([bs, semi, len])=>{ if(bs === s) bass(t, semi, len, secPer16); });
     if(s % 4 === 0){
       const beat = s / 4;
@@ -1967,11 +1974,21 @@ function startRap(){
     .map((raw, i)=>({raw: raw.trim(), i}))
     .filter(l=>l.raw && !/^[#\[]/.test(l.raw));
   if(!lines.length) return;
-  if(!playing) startBeat();          // no a-cappella surprises
-  rapping = true;
-  rapBtn.textContent = 'Stop rap';
   const bpm = userTempo || 90;
   const barSec = (60 / bpm) * 4;
+  // come in on the one: a one-bar count-in on a cold start, otherwise
+  // the next downbeat (padded so there's always at least half a bar)
+  let lead;
+  if(!playing){
+    startBeat();
+    lead = barSec + 0.05;
+  }else{
+    const secPer16 = (60 / bpm) / 4;
+    lead = (nextTime - actx.currentTime) + (((16 - (step % 16)) % 16) * secPer16);
+    if(lead < barSec * 0.5) lead += barSec;
+  }
+  rapping = true;
+  rapBtn.textContent = 'Stop rap';
   const voice = rapVoice();
   const sylOf = l=>{
     const m = analysis && analysis.lines[l.i] === editor.value.split('\n')[l.i]
@@ -2025,6 +2042,7 @@ function startRap(){
     }, at * 1000));
   };
 
+  plan.forEach(p=>{ p.at += lead; });
   plan.forEach(p=>{
     // breath chunks: split at punctuation, onsets quantized to the 8th-
     // note grid, the bar's last 8th left empty to breathe, and the final
@@ -2064,7 +2082,7 @@ function startRap(){
       off += share;
     });
   });
-  rapTimers.push(setTimeout(stopRap, (t + barSec * 0.5) * 1000));
+  rapTimers.push(setTimeout(stopRap, (lead + t + barSec * 0.5) * 1000));
 }
 rapBtn.addEventListener('click', startRap);
 if('speechSynthesis' in window) speechSynthesis.getVoices();  // warm the list
