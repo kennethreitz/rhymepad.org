@@ -652,6 +652,16 @@ function openDoc(id){
   saveDocs();
   editor.value = localStorage.getItem(docKey(id)) || '';
   analysis = null;
+  // scorched earth on every transient layer — no paint from the old
+  // draft can survive the transition
+  if(typeof stopRap === 'function') stopRap();
+  if(typeof closeGhostMenu === 'function') closeGhostMenu();
+  if(typeof ghost !== 'undefined') ghost = null;
+  if(typeof karaokeSpan !== 'undefined') karaokeSpan = null;
+  if(typeof activeFam !== 'undefined' && activeFam !== null) setEmphasis(null);
+  highlight.innerHTML = '';
+  stresslayer.innerHTML = '';
+  gutter.innerHTML = '';
   renderTabs();
   render(); analyze(); editor.focus();
   if(typeof linkSoon === 'function') linkSoon();
