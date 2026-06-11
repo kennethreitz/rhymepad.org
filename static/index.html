@@ -1966,6 +1966,42 @@ let rapping = false;
 let karaokeSpan = null;  // {l, s, e} — the word being rapped right now
 const rapBtn = document.getElementById('rapBtn');
 
+/* Flow archetypes — different rhythmic approaches the rap engine can
+   take to a line. grid = onset quantization (per bar); gap = how much
+   of the slot is left as breath; rateMul = delivery speed feel;
+   push = constant lag for laid-back pocket; resplit = re-chunk the
+   line (triplet groups / staccato word-pairs); frontload = cram the
+   words early and let the rest of the bar ring. */
+const FLOWS = {
+  straight: {grid: 8,  gap: 1/8, rateMul: 1,    push: 0},
+  laidback: {grid: 8,  gap: 1/8, rateMul: 0.95, push: 1/16},
+  triplet:  {grid: 12, gap: 1/12, rateMul: 1,   push: 0, resplit: ['syl', 3]},
+  burst:    {grid: 16, gap: 0,  rateMul: 1.15,  push: 0, frontload: 0.6},
+  staccato: {grid: 8,  gap: 1/8, rateMul: 1.05, push: 0, resplit: ['words', 2]},
+  anthem:   {grid: 4,  gap: 1/8, rateMul: 0.92, push: 0},
+};
+
+function resplitChunk(c, mode, target){
+  // split a {text,map} chunk at word boundaries into rhythmic groups
+  const words = [];
+  const re = /\S+/g; let m;
+  while((m = re.exec(c.text))) words.push({s: m.index, e: m.index + m[0].length});
+  if(words.length <= 1) return [c];
+  const sylw = w=>Math.max(1, (c.text.slice(w.s, w.e).match(/[aeiouy]+/gi) || []).length);
+  const groups = [];
+  let cur = null, count = 0;
+  for(const w of words){
+    const n = mode === 'words' ? 1 : sylw(w);
+    if(!cur){ cur = {s: w.s, e: w.e}; count = n; }
+    else if(count + n > target){ groups.push(cur); cur = {s: w.s, e: w.e}; count = n; }
+    else { cur.e = w.e; count += n; }
+  }
+  if(cur) groups.push(cur);
+  return groups.map((g, i)=>({
+    text: c.text.slice(g.s, g.e), map: c.map.slice(g.s, g.e),
+    line: c.line, hype: i === groups.length - 1 ? c.hype : ''}));
+}
+
 function rapVoice(){
   const vs = speechSynthesis.getVoices().filter(v=>v.lang.startsWith('en'));
   return vs.find(v=>/Aaron|Daniel|Samantha|Google US/i.test(v.name)) || vs[0] || null;
@@ -2135,15 +2171,33 @@ function startRap(){
               hype: hypeText.trim()};
     }).filter(c=>c.text || c.hype);
     if(!chunks.length) return;
+
+    // ---- pick this line's FLOW from its own properties ----
+    const inChorus = /chorus|hook/.test(sectionOf[p.l.i] || '');
+    const sylPerBar = p.syl / (p.slot / barSec);
+    const beatSwing = (PATTERNS[current] || {}).swing || 0;
+    let flowName;
+    if(inChorus) flowName = 'anthem';
+    else if(sylPerBar >= 15) flowName = 'burst';
+    else if(bpm >= 130) flowName = (p.k % 8 < 4) ? 'triplet' : 'straight';
+    else if(p.syl <= 7 && p.l.raw.split(/\s+/).length <= 5) flowName = 'staccato';
+    else if(beatSwing >= 0.12 && sylPerBar < 11) flowName = 'laidback';
+    else flowName = ['straight', 'laidback', 'straight', 'triplet'][Math.floor(p.k / 4) % 4];
+    const flow = FLOWS[flowName];
+
+    let flowChunks = chunks;
+    if(flow.resplit)
+      flowChunks = chunks.flatMap(c=>resplitChunk(c, flow.resplit[0], flow.resplit[1]));
+    const GRID = barSec / flow.grid;
+
     // clusters only APPORTION the line's true syllable count across
     // chunks — silent e's can't inflate the speed that way
-    const cs = chunks.map(c=>({
+    const cs = flowChunks.map(c=>({
       c, w: Math.max(1, ((c.text || c.hype).match(/[aeiouy]+/gi) || []).length)}));
     const wtotal = cs.reduce((a, b)=>a + b.w, 0);
-    const usable = p.slot * 7 / 8;   // breathe on the last eighth
+    const usable = p.slot * (1 - flow.gap) * (flow.frontload || 1);
     // the energy arc: pitch climbs gently through each 4-bar phrase;
     // chorus/hook sections perform a step hotter
-    const inChorus = /chorus|hook/.test(sectionOf[p.l.i] || '');
     const basePitch = 0.88 + (p.k % 4) * 0.018 + (inChorus ? 0.06 : 0);
     // couplet cadence from the engine's own rhyme families: the first
     // line of a rhymed pair stays suspended, its answer resolves low
@@ -2153,12 +2207,14 @@ function startRap(){
     let off = 0;
     cs.forEach((ch, j)=>{
       const share = usable * ch.w / wtotal;
-      let at = p.at + Math.round(off / EIGHTH) * EIGHTH;  // lock to the grid
-      const rate = Math.min(1.5, Math.max(0.7, chSylRate(p.syl, ch.w, wtotal, share)));
+      let at = p.at + flow.push * barSec
+             + Math.round(off / GRID) * GRID;  // lock to this flow's grid
+      const rate = Math.min(1.6, Math.max(0.7,
+        chSylRate(p.syl, ch.w, wtotal, share) * flow.rateMul));
       // anacrusis: leading unstressed syllables start early, so the
       // chunk's first STRESS lands on the gridpoint
       const lead0 = leadingUnstressed(ch.c.line, ch.c.map[0]);
-      if(lead0 > 0) at = Math.max(p.at, at - Math.min(EIGHTH, lead0 / (SYL_PER_SEC * rate)));
+      if(lead0 > 0) at = Math.max(p.at, at - Math.min(GRID, lead0 / (SYL_PER_SEC * rate)));
       if(ch.c.text)
         say(ch.c.text, at, rate, j === cs.length - 1 ? cadence : basePitch,
             ch.c.line, ch.c.map);
