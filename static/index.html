@@ -2046,7 +2046,7 @@ function calibrateVoice(voice){
   // a silent 12-syllable phrase, timed — every platform speaks at its
   // own pace, so we measure instead of guessing. The speak->onstart
   // gap is the engine's spin-up; we pre-subtract it from every cue.
-  const u = new SpeechSynthesisUtterance('one two three four five six seven eight nine ten eleven');
+  const u = new SpeechSynthesisUtterance('one two three four five six seven');
   if(voice) u.voice = voice;
   u.volume = 0; u.rate = 1;
   const tSpeak = performance.now();
@@ -2054,7 +2054,7 @@ function calibrateVoice(voice){
   u.onstart = ()=>{
     t0 = performance.now();
     const lat = (t0 - tSpeak) / 1000;
-    if(lat > 0.005 && lat < 0.6){
+    if(lat > 0.005 && lat < 2){
       voiceLat = lat;
       localStorage.setItem(lkey, lat.toFixed(3));
     }
@@ -2062,8 +2062,8 @@ function calibrateVoice(voice){
   u.onend = ()=>{
     if(!t0) return;
     const sec = (performance.now() - t0) / 1000;
-    if(sec > 1 && sec < 12){
-      voiceCal = 13 / sec;
+    if(sec > 0.5 && sec < 8){
+      voiceCal = 8 / sec;
       localStorage.setItem(key, voiceCal.toFixed(2));
     }
   };
@@ -2307,9 +2307,10 @@ function startRap(){
       off += share;
     });
   });
-  if(coldStart){  // the hype man counts you in
-    say('yo', 0.4, 1, 0.85, null, null, 0.6, hype);
-    say('yo', 0.4 + barSec / 2, 1, 0.85, null, null, 0.6, hype);
+  if(coldStart){  // the count-in — after the calibration bar, if any
+    const yoAt = (calibrating ? barSec : 0) + 0.4;
+    say('yo', yoAt, 1, 0.85, null, null, 0.6, hype);
+    say('yo', yoAt + barSec / 2, 1, 0.85, null, null, 0.6, hype);
   }
   rapTimers.push(setTimeout(stopRap, (lead + t + barSec * 0.5) * 1000));
 
