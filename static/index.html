@@ -2146,6 +2146,9 @@ function startRap(){
   });
 
   const say = (text, at, rate, pitch, lineIdx, charMap, vol, v2)=>{
+    // a lone capital letter gets spelled out ("capital I") by some
+    // voices — lowercase it; the word sounds the same
+    if(/^[A-Z][^A-Za-z]*$/.test(text.trim())) text = text.toLowerCase();
     rapTimers.push(setTimeout(()=>{
       if(!rapping) return;
       const u = new SpeechSynthesisUtterance(text);
