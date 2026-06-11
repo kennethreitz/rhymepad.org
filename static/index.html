@@ -2146,8 +2146,11 @@ function startRap(){
   });
 
   const say = (text, at, rate, pitch, lineIdx, charMap, vol, v2)=>{
-    // a lone capital letter gets spelled out ("capital I") by some
-    // voices — lowercase it; the word sounds the same
+    // some voices announce "capital I" — lowercase every standalone I
+    // (sounds identical), normalize curly quotes, and lowercase any
+    // lone-capital utterance
+    text = text.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '')
+               .replace(/\bI\b/g, 'i');
     if(/^[A-Z][^A-Za-z]*$/.test(text.trim())) text = text.toLowerCase();
     rapTimers.push(setTimeout(()=>{
       if(!rapping) return;
