@@ -791,6 +791,7 @@ function render(){
     html += (line ? `<span class="${lcls}" data-l="${i}">${h}</span>` : '') + '\n';
   });
   highlight.innerHTML = html;
+  if(typeof syncSampleChip === 'function') syncSampleChip();
   if(activeFam != null)
     highlight.querySelectorAll(`.hseg[data-g="${activeFam}"]`).forEach(s=>{
       s.classList.add('lit');
