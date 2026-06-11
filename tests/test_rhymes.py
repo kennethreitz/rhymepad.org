@@ -779,3 +779,13 @@ def test_triple_not_dangling_on_stopword():
     text = ("should I listen to myself why\n"
             "it just don't smell like a")
     assert "smell like a" not in highlighted(text)
+
+
+def test_repeated_word_at_line_ends_rhymes():
+    # "again / again / again" at line ends is a monorhyme scheme — color it
+    text = ("everything spins round again\n"
+            "the messages flood back again\n"
+            "my inner voice again")
+    group_with(text, "again", "again")  # all three share a colored family
+    # but mid-line repetition stays refrain, not a rhyme group
+    assert "round" not in highlighted("round and round and round we go\nnothing else")

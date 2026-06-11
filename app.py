@@ -690,8 +690,15 @@ def analyze(draft: Draft):
         # rhyme partner for the "fire" it starts with
         distinct = {t["word"].split()[0].lower() for t in toks}
         if len(distinct) < 2:
-            continue  # repetition is refrain, not rhyme — a group only
-            # colors once a DIFFERING word rhymes into it
+            # the SAME word at line ends is a real monorhyme (again /
+            # again) — but only for a non-refrain word across DIFFERENT
+            # lines; identical repeated lines or hook words are refrain
+            end_lines = {lines[t["line"]].strip().lower()
+                         for t in toks if t["is_end"]}
+            if not (all(t["is_end"] and " " not in t["word"] for t in toks)
+                    and len(end_lines) > 1
+                    and next(iter(distinct)) not in refrain):
+                continue
         if all(" " in t["word"] and t["word"].split()[0] in STOPWORDS
                for t in toks):
             continue  # stopword-anchored phrases need a real-word partner
