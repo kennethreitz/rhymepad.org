@@ -2065,9 +2065,16 @@ function stopRap(){
 
 function startRap(){
   if(rapping){ stopRap(); return; }
-  const lines = editor.value.split('\n')
+  let lines = editor.value.split('\n')
     .map((raw, i)=>({raw: raw.trim(), i}))
     .filter(l=>l.raw && !/^[#\[]/.test(l.raw));
+  // a selection raps just the selected lines
+  if(editor.selectionStart !== editor.selectionEnd){
+    const a = editor.value.slice(0, editor.selectionStart).split('\n').length - 1;
+    const b = editor.value.slice(0, editor.selectionEnd).split('\n').length - 1;
+    const sel = lines.filter(l=>l.i >= a && l.i <= b);
+    if(sel.length) lines = sel;
+  }
   if(!lines.length) return;
   const bpm = userTempo || 90;
   const barSec = (60 / bpm) * 4;
