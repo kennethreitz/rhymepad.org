@@ -1971,9 +1971,13 @@ function rapVoice(){
   return vs.find(v=>/Aaron|Daniel|Samantha|Google US/i.test(v.name)) || vs[0] || null;
 }
 function hypeVoice(main){
-  // the hype man: any other english voice in the booth
+  // the hype man: another GOOD english voice — never the novelty ones
+  // (Albert, Bubbles, Bad News...). No decent alternate? same voice,
+  // the pitch drop alone reads as a second presence.
   const vs = speechSynthesis.getVoices().filter(v=>v.lang.startsWith('en'));
-  return vs.find(v=>!main || v.name !== main.name) || main;
+  const good = vs.filter(v=>
+    /Aaron|Daniel|Samantha|Karen|Moira|Rishi|Tessa|Arthur|Martha|Google (US|UK)/i.test(v.name));
+  return good.find(v=>!main || v.name !== main.name) || main;
 }
 let voiceCal = 0;  // measured syllables/sec at rate 1, per voice
 function calibrateVoice(voice){
