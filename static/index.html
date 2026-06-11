@@ -2039,7 +2039,10 @@ function calibrateVoice(voice){
   const lkey = 'rhymepad.lat.' + (voice ? voice.name : 'default');
   const saved = parseFloat(localStorage.getItem(key));
   voiceLat = parseFloat(localStorage.getItem(lkey)) || 0;
-  if(saved > 1 && saved < 12){ voiceCal = saved; return; }
+  if(saved > 1 && saved < 12){
+    voiceCal = saved;
+    if(voiceLat) return;  // both measured — nothing to do
+  }
   // a silent 12-syllable phrase, timed — every platform speaks at its
   // own pace, so we measure instead of guessing. The speak->onstart
   // gap is the engine's spin-up; we pre-subtract it from every cue.
