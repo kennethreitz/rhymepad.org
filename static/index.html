@@ -319,7 +319,9 @@
   .ghost-menu .gm-item {
     padding: 5px 10px; border-radius: 5px; cursor: pointer;
     font-size: 13px; color: var(--ink);
+    display: flex; justify-content: space-between; gap: 14px;
   }
+  .ghost-menu .gm-syl { color: var(--ink-dim); letter-spacing: 2px; }
   .ghost-menu .gm-item.sel {
     background: color-mix(in srgb, var(--accent) 22%, transparent);
     color: var(--accent);
@@ -667,6 +669,7 @@ async function analyze(){
     if(seq !== analyzeSeq) return;  // a newer request superseded us
     analysis = await r.json();
     backendOk = true;
+    if(typeof ghostSoon === 'function') ghostSoon();  // meter is fresh: re-rank
   }catch(e){
     if(seq !== analyzeSeq) return;
     backendOk = false;
@@ -903,30 +906,10 @@ function caretStanza(){
 }
 
 function buildReadout(){
-  if(!backendOk){
-    schemeReadout.innerHTML = '<span class="offline">backend offline — run: uv run uvicorn app:app</span>';
-    return;
-  }
-  const parts = [];
-  const ln = caretLine();
-  const m = analysis && analysis.meter ? analysis.meter.find(x=>x.l===ln) : null;
-  if(m){
-    let p = `${m.syl} syl` + (m.label ? ` · ${m.label}` : '');
-    parts.push(p);
-  }
-  const st = caretStanza();
-  if(st){
-    const bi = st.lines.indexOf(ln);
-    if(bi >= 0) parts.unshift(`bar ${bi + 1}/${st.lines.length}`);
-  }
-  if(activeFam !== null && analysis){
-    const g = analysis.groups.find(x=>x.id === activeFam);
-    const fam = [...new Set(analysis.tokens.filter(t=>t.g===activeFam)
-      .map(t=>analysis.lines[t.l].slice(t.s,t.e).toLowerCase()))];
-    if(g && fam.length >= 2)
-      parts.push(`rhymes <b>${esc(g.sound)}</b> — ${esc(fam.slice(0,6).join(', '))}`);
-  }
-  schemeReadout.innerHTML = parts.join(' &nbsp;&nbsp; ');
+  // the stats bar is gone — this element only ever speaks up when the
+  // engine is unreachable (and hosts the transient "saved" flash)
+  schemeReadout.innerHTML = backendOk ? ''
+    : '<span class="offline">backend offline — run: uv run uvicorn app:app</span>';
 }
 
 editor.addEventListener('input', ()=>{
@@ -1028,12 +1011,20 @@ async function computeGhost(){
     break;
   }
   if(!target) return clear();
+  let tline = -1;
+  for(let j = ln - 1; j >= 0; j--){
+    const prev = lines[j];
+    if(!prev.trim()) break;
+    if(/^\s*[#\[]/.test(prev)) continue;
+    tline = j; break;
+  }
   if(!(target in ghostCache)){
     ghostCache[target] = null;  // in flight
     try{
       const r = await fetch(`/api/lookup?word=${encodeURIComponent(target)}&mode=rhyme`);
       const d = await r.json();
-      ghostCache[target] = (d.words || []).map(w=>w.word.toLowerCase());
+      ghostCache[target] = (d.words || [])
+        .map(w=>({word: w.word.toLowerCase(), syl: w.syl || 1, z: w.z || 0}));
     }catch(e){ delete ghostCache[target]; return; }
     // the caret may have moved while we fetched
     return computeGhost();
@@ -1041,13 +1032,26 @@ async function computeGhost(){
   const cands = ghostCache[target];
   if(!cands || !cands.length) return clear();
   const cur = lastWordOf(line);
-  if(cur && (cur === target || cands.includes(cur))) return clear();  // already lands
+  if(cur && (cur === target || cands.some(c=>c.word === cur))) return clear();  // already lands
   // skip words already spent as line endings in this draft
   const spent = new Set(lines.map(l=>lastWordOf(l)).filter(Boolean));
-  const avail = cands.filter(w=>!spent.has(w) && w !== cur).slice(0, 8);
+  let avail = cands.filter(c=>!spent.has(c.word) && c.word !== cur);
   if(!avail.length) return clear();
-  if(!ghost || ghost.line !== ln || ghost.base !== line || ghost.cands.join() !== avail.join()){
-    ghost = {line: ln, base: line, text: avail[0], cands: avail, sel: 0};
+  // fit the bar: when the meter is fresh for both lines, prefer the
+  // candidate whose syllables land this line closest to the last one
+  const fresh = i => analysis && analysis.lines[i] === lines[i] && analysis.meter && analysis.meter[i];
+  if(tline >= 0 && fresh(tline) && fresh(ln)){
+    const gap = analysis.meter[tline].syl - analysis.meter[ln].syl;
+    if(gap >= 1){
+      avail = avail.map((c, i)=>({c, i, fit: Math.abs(c.syl - gap)}))
+        .sort((a, b)=>a.fit - b.fit || a.i - b.i)
+        .map(x=>x.c);
+    }
+  }
+  avail = avail.slice(0, 8);
+  const sig = avail.map(c=>c.word).join();
+  if(!ghost || ghost.line !== ln || ghost.base !== line || ghost.cands.map(c=>c.word).join() !== sig){
+    ghost = {line: ln, base: line, text: avail[0].word, cands: avail, sel: 0};
     render();
   }
 }
@@ -1069,13 +1073,13 @@ function openGhostMenu(){
   if(!ghost) return;
   ghostMenu = document.createElement('div');
   ghostMenu.className = 'ghost-menu';
-  ghost.cands.forEach((w, i)=>{
+  ghost.cands.forEach((c, i)=>{
     const it = document.createElement('div');
     it.className = 'gm-item' + (i === ghost.sel ? ' sel' : '');
-    it.textContent = w;
+    it.innerHTML = `<span>${esc(c.word)}</span><span class="gm-syl">${'\u00b7'.repeat(Math.min(c.syl, 6))}</span>`;
     it.addEventListener('mousedown', e=>e.preventDefault());  // keep editor focus
-    it.addEventListener('click', ()=>acceptGhost(w));
-    it.addEventListener('mouseenter', ()=>{ ghost.sel = i; ghost.text = w; render(); paintGhostMenu(); });
+    it.addEventListener('click', ()=>acceptGhost(c.word));
+    it.addEventListener('mouseenter', ()=>{ ghost.sel = i; ghost.text = c.word; render(); paintGhostMenu(); });
     ghostMenu.appendChild(it);
   });
   editorShell.appendChild(ghostMenu);
@@ -1105,12 +1109,12 @@ editor.addEventListener('keydown', e=>{
       e.preventDefault();
       const n = ghost.cands.length;
       ghost.sel = (ghost.sel + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
-      ghost.text = ghost.cands[ghost.sel];
+      ghost.text = ghost.cands[ghost.sel].word;
       render(); paintGhostMenu(); positionGhostMenu();
       return;
     }
     if(e.key === 'Enter' || e.key === 'Tab'){
-      e.preventDefault(); acceptGhost(ghost.cands[ghost.sel]); return;
+      e.preventDefault(); acceptGhost(ghost.cands[ghost.sel].word); return;
     }
     if(e.key === 'Escape'){ e.preventDefault(); closeGhostMenu(); return; }
     closeGhostMenu();  // any other key: back to writing
