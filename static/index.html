@@ -2001,6 +2001,7 @@ function startRap(){
   }
   rapping = true;
   rapBtn.innerHTML = 'Stop rap';
+  const editorLines = editor.value.split('\n');
   const voice = rapVoice();
   const sylOf = l=>{
     const m = analysis && analysis.lines[l.i] === editor.value.split('\n')[l.i]
@@ -2039,7 +2040,6 @@ function startRap(){
     return entry;
   });
 
-  const editorLines = editor.value.split('\n');
   const say = (text, at, rate, pitch, lineIdx, charMap, vol)=>{
     rapTimers.push(setTimeout(()=>{
       if(!rapping) return;
