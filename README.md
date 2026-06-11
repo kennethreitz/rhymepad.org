@@ -62,6 +62,23 @@ them.
 internally but never claim the line-ending slot. Lines starting with
 `#` (your notes) or `[` (section headers) are skipped.
 
+## Using the engine without the web app
+
+The rhyme engine is a framework-free module — no FastAPI, no HTTP:
+
+```python
+import rhymes
+
+result = rhymes.analyze_text("an orange door hinge\nporage")
+# token spans, rhyme groups (with strength), schemes, meter,
+# alliteration, near-misses, unanswered endings
+
+rhymes.lookup_data("light", mode="rhyme")   # ranked rhymes
+rhymes.word_data("orange")                  # phonetic anatomy
+```
+
+`app.py` is just the FastAPI shell around it.
+
 ## API
 
 - `POST /api/analyze` `{"text": "..."}` → token spans, rhyme groups
