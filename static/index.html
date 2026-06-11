@@ -82,9 +82,12 @@
     display: flex;
     align-items: baseline;
     justify-content: space-between;
+    gap: 12px;
     border-bottom: 1px solid var(--line);
     padding-bottom: 10px;
   }
+  .brandwrap { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; min-width: 0; }
+  .contact { flex: none; text-decoration: none; font-size: 12px; align-self: center; }
   .brand {
     font-family: 'Fraunces', serif;
     font-weight: 900;
@@ -320,8 +323,11 @@
 <body>
 <div class="wrap">
   <header>
-    <h1 class="brand">Rhyme<span>Pad</span></h1>
-    <p class="tagline">a scratchpad for poets &amp; rappers — real phonetic rhyme detection</p>
+    <div class="brandwrap">
+      <h1 class="brand">Rhyme<span>Pad</span></h1>
+      <p class="tagline">a scratchpad for poets &amp; rappers — real phonetic rhyme detection</p>
+    </div>
+    <a class="btn contact" href="mailto:me@kennethreitz.org?subject=RhymePad" title="Email the author, Kenneth Reitz">Contact the author</a>
   </header>
 
   <!-- EDITOR -->
