@@ -740,6 +740,7 @@ function render(){
     const phrases = toks.filter(t=>t.ph);
     const als = (allitToggle.checked && fresh) ? (allitByLine[i] || []) : [];
     const opens = (rhymeToggle.checked && fresh) ? (openByLine[i] || []) : [];
+    const kj = (karaokeSpan && karaokeSpan.l === i) ? karaokeSpan : null;
     const nears = (rhymeToggle.checked && fresh) ? (nearByLine[i] || []) : [];
     let h = '';
     if(!toks.length && !als.length && !opens.length){
@@ -750,6 +751,7 @@ function render(){
       als.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
       opens.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
       nears.forEach(t=>{ cuts.add(t.s); cuts.add(t.e); });
+      if(kj){ cuts.add(kj.s); cuts.add(kj.e); }
       const pts = [...cuts].sort((a,b)=>a-b);
       for(let k = 0; k < pts.length - 1; k++){
         const a = pts[k], b = pts[k+1];
@@ -760,7 +762,8 @@ function render(){
         const al = als.find(t=>t.s <= a && b <= t.e);
         const op = opens.find(t=>t.s <= a && b <= t.e);
         const nr = nears.find(t=>t.s <= a && b <= t.e);
-        if(!w && !p && !al && !op && !nr){ h += text; continue; }
+        const kk = kj && kj.s <= a && b <= kj.e;
+        if(!w && !p && !al && !op && !nr && !kk){ h += text; continue; }
         // whole word fills dimly; the rhyming part gets a bright underline.
         // gray = an ending still waiting for its answer
         let style = '';
@@ -783,6 +786,7 @@ function render(){
         if(al) shadows.push(`inset 0 -2px 0 0 color-mix(in srgb, var(--r${al.g % COLORS}) 75%, transparent)`);
         if(nr) style += 'text-decoration:underline dotted color-mix(in srgb, var(--accent-2) 60%, transparent);text-underline-offset:3px;';
         if(shadows.length) style += `box-shadow:${shadows.join(',')};`;
+        if(kk) style += 'background:var(--accent);color:#1a120c;font-weight:600;';
         h += `<span class="hseg"${tk}${dg} style="${style}">${text}</span>`;
       }
     }
@@ -1939,6 +1943,7 @@ document.getElementById('stopBeat').addEventListener('click', ()=>{ stopBeat(); 
    the charm. */
 let rapTimers = [];
 let rapping = false;
+let karaokeSpan = null;  // {l, s, e} — the word being rapped right now
 const rapBtn = document.getElementById('rapBtn');
 
 function rapVoice(){
@@ -1951,6 +1956,7 @@ function stopRap(){
   rapTimers.forEach(clearTimeout); rapTimers = [];
   try{ speechSynthesis.cancel(); }catch(e){}
   rapBtn.textContent = 'Rap it';
+  if(karaokeSpan){ karaokeSpan = null; render(); }
 }
 
 function startRap(){
@@ -1993,12 +1999,26 @@ function startRap(){
     return {l, at, syl, slot: bars * barSec};
   });
 
-  const say = (text, at, rate, pitch)=>{
+  const editorLines = editor.value.split('\n');
+  const say = (text, at, rate, pitch, lineIdx, charMap)=>{
     rapTimers.push(setTimeout(()=>{
       if(!rapping) return;
       const u = new SpeechSynthesisUtterance(text);
       if(voice) u.voice = voice;
       u.rate = rate; u.pitch = pitch;
+      if(lineIdx != null && charMap){
+        u.onboundary = e=>{
+          if(e.name && e.name !== 'word') return;
+          if(!rapping) return;
+          const rest = text.slice(e.charIndex);
+          const m = rest.match(/[A-Za-z'\u2019-]+/);
+          if(!m) return;
+          const a = e.charIndex + m.index, b = a + m[0].length;
+          if(charMap[a] == null || charMap[b - 1] == null) return;
+          karaokeSpan = {l: lineIdx, s: charMap[a], e: charMap[b - 1] + 1};
+          render();
+        };
+      }
       speechSynthesis.speak(u);
     }, at * 1000));
   };
@@ -2007,14 +2027,29 @@ function startRap(){
     // breath chunks: split at punctuation, onsets quantized to the 8th-
     // note grid, the bar's last 8th left empty to breathe, and the final
     // chunk of every line dropping pitch — the cadence
-    const clean = p.l.raw.replace(/[\[\]()*_#"]/g, '');
-    const chunks = clean.split(/(?<=[,;:.!?\u2014\u2013])\s+/)
+    // chunk the ORIGINAL line and keep a stripped-char -> editor-column
+    // map per chunk, so speech boundary events can light the live word
+    const lineText = editorLines[p.l.i] || '';
+    const base = lineText.length - lineText.trimStart().length;
+    const rawChunks = p.l.raw.split(/(?<=[,;:.!?\u2014\u2013])\s+/)
       .map(s=>s.trim()).filter(Boolean);
+    let cursor = 0;
+    const chunks = rawChunks.map(rc=>{
+      const off = p.l.raw.indexOf(rc, cursor);
+      cursor = off + rc.length;
+      let text = '', map = [];
+      for(let q = 0; q < rc.length; q++){
+        if('[]()*_#"'.includes(rc[q])) continue;
+        map.push(base + off + q);
+        text += rc[q];
+      }
+      return {text: text.trim() ? text : rc, map, line: p.l.i};
+    }).filter(c=>c.text.trim());
     if(!chunks.length) return;
     // clusters only APPORTION the line's true syllable count across
     // chunks — silent e's can't inflate the speed that way
     const cs = chunks.map(c=>({
-      c, w: Math.max(1, (c.match(/[aeiouy]+/gi) || []).length)}));
+      c, w: Math.max(1, (c.text.match(/[aeiouy]+/gi) || []).length)}));
     const wtotal = cs.reduce((a, b)=>a + b.w, 0);
     const usable = p.slot * 7 / 8;   // breathe on the last eighth
     let off = 0;
@@ -2023,7 +2058,7 @@ function startRap(){
       const chSyl = p.syl * ch.w / wtotal;
       const at = p.at + Math.round(off / EIGHTH) * EIGHTH;  // lock to the grid
       const rate = Math.min(1.5, Math.max(0.7, chSyl / SYL_PER_SEC / share));
-      say(ch.c, at, rate, j === cs.length - 1 ? 0.78 : 0.92);
+      say(ch.c.text, at, rate, j === cs.length - 1 ? 0.78 : 0.92, ch.c.line, ch.c.map);
       off += share;
     });
   });
