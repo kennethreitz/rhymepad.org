@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>RhymePad — a scratchpad for poets &amp; rappers</title>
 <meta name="description" content="Write lyrics and poems with live phonetic rhyme detection — internal rhymes, multisyllabics, multi-word mosaics — plus rhyme & synonym lookup, beats, and per-line meter.">
 <meta property="og:title" content="RhymePad">
@@ -57,8 +57,8 @@
     --r8:#c0d44e; --r9:#ee5d8f; --r10:#6f8bf2; --r11:#8fe85a;
     --r12:#5ad8d8; --r13:#e0985a; --r14:#b88ce8; --r15:#56c878;
   }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow-x: hidden; }
   body {
     background:
       radial-gradient(1200px 600px at 85% -10%, rgba(232,129,74,0.10), transparent 60%),
@@ -290,19 +290,29 @@
   ::-webkit-scrollbar-thumb { background: #3a342d; border-radius: 6px; border: 2px solid var(--panel); }
 
   /* ---- mobile: stack the panel under the editor ---- */
+  .btn, .tab { touch-action: manipulation; }
   @media (max-width: 900px){
     .wrap {
       grid-template-columns: 1fr;
       height: auto; min-height: 100dvh;
       padding: 10px; gap: 10px;
+      /* keep content clear of notch / home indicator */
+      padding-left: max(10px, env(safe-area-inset-left));
+      padding-right: max(10px, env(safe-area-inset-right));
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
     }
     header { flex-direction: column; align-items: flex-start; gap: 2px; padding-bottom: 8px; }
     .brand { font-size: 24px; }
-    .editor-shell { min-height: 55dvh; }
+    .editor-shell { min-height: 52dvh; }
     #highlight, #stresslayer, #editor { font-size: 16px; }  /* sub-16px makes iOS zoom-jump */
-    aside { min-height: 45dvh; }
+    aside { min-height: 48dvh; }
     .toolbar { gap: 8px; }
     .scheme-readout { margin-left: 0; width: 100%; }
+    /* roomier tap targets */
+    .btn { padding: 11px 16px; font-size: 14px; }
+    .mtoggle { font-size: 13px; padding: 4px 2px; }
+    .tab { padding: 14px 0; }
+    .drafts-bar { gap: 8px; }
   }
 </style>
 <script defer src="https://analytics.kennethreitz.org/script.js" data-website-id="2bb8ad58-25d3-41bf-aa4c-f7d236410e17"></script>
