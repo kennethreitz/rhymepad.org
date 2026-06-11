@@ -2002,6 +2002,27 @@ function resplitChunk(c, mode, target){
     line: c.line, hype: i === groups.length - 1 ? c.hype : ''}));
 }
 
+function cutAtCols(c, cols){
+  // split a {text,map} chunk so pieces BEGIN at the given editor
+  // columns — rhyme words start their own utterance, on the grid
+  if(!cols || !cols.length) return [c];
+  const cuts = new Set(cols);
+  const pieces = [];
+  let start = 0;
+  for(let i = 1; i < c.text.length; i++){
+    if(cuts.has(c.map[i]) && c.text[i - 1] === ' '){
+      pieces.push({s: start, e: i});
+      start = i;
+    }
+  }
+  pieces.push({s: start, e: c.text.length});
+  return pieces.map((g, i)=>({
+    text: c.text.slice(g.s, g.e).trim() ? c.text.slice(g.s, g.e) : '',
+    map: c.map.slice(g.s, g.e), line: c.line,
+    hype: i === pieces.length - 1 ? c.hype : ''}))
+    .filter(x=>x.text || x.hype);
+}
+
 function rapVoice(){
   const vs = speechSynthesis.getVoices().filter(v=>v.lang.startsWith('en'));
   return vs.find(v=>/Aaron|Daniel|Samantha|Google US/i.test(v.name)) || vs[0] || null;
@@ -2091,10 +2112,17 @@ function startRap(){
   // go halftime (two bars); sparse ones double-time (packed two to a bar).
   const SYL_PER_SEC = voiceCal || 4.3;  // measured per voice when we can
   const EIGHTH = barSec / 8;
-  const endGroup = {};
+  const endGroup = {}, endSpan = {}, rhymeCols = {};
   if(analysis){
     analysis.tokens.forEach(tk=>{
-      if(tk.end && analysis.lines[tk.l] === editorLines[tk.l]) endGroup[tk.l] = tk.g;
+      if(analysis.lines[tk.l] !== editorLines[tk.l]) return;
+      if(tk.end){
+        endGroup[tk.l] = tk.g;
+        if(!tk.ph) endSpan[tk.l] = {s: tk.s, e: tk.e};
+      }
+      // strong rhymes are downbeat material
+      if(!tk.ph && (tk.str == null || tk.str >= 0.75))
+        (rhymeCols[tk.l] ||= []).push(tk.s);
     });
   }
   let t = 0, prevG = null;
@@ -2188,7 +2216,11 @@ function startRap(){
     let flowChunks = chunks;
     if(flow.resplit)
       flowChunks = chunks.flatMap(c=>resplitChunk(c, flow.resplit[0], flow.resplit[1]));
+    else if(rhymeCols[p.l.i])
+      // rhyme words open their own chunk, so each lands on a gridpoint
+      flowChunks = chunks.flatMap(c=>cutAtCols(c, rhymeCols[p.l.i]));
     const GRID = barSec / flow.grid;
+    const lastLine = p.k === plan.length - 1;
 
     // clusters only APPORTION the line's true syllable count across
     // chunks — silent e's can't inflate the speed that way
@@ -2202,15 +2234,17 @@ function startRap(){
     // couplet cadence from the engine's own rhyme families: the first
     // line of a rhymed pair stays suspended, its answer resolves low
     let cadence = 0.78;
+    const resolving = p.endG != null && p.prevEndG != null && p.endG === p.prevEndG;
     if(p.endG != null && p.prevEndG != null)
-      cadence = p.endG === p.prevEndG ? 0.7 : 0.86;
+      cadence = resolving ? 0.7 : 0.86;
+    if(lastLine) cadence = 0.66;  // stick the landing
     let off = 0;
     cs.forEach((ch, j)=>{
       const share = usable * ch.w / wtotal;
       let at = p.at + flow.push * barSec
              + Math.round(off / GRID) * GRID;  // lock to this flow's grid
       const rate = Math.min(1.6, Math.max(0.7,
-        chSylRate(p.syl, ch.w, wtotal, share) * flow.rateMul));
+        chSylRate(p.syl, ch.w, wtotal, share) * flow.rateMul * (lastLine ? 0.9 : 1)));
       // anacrusis: leading unstressed syllables start early, so the
       // chunk's first STRESS lands on the gridpoint
       const lead0 = leadingUnstressed(ch.c.line, ch.c.map[0]);
@@ -2225,6 +2259,14 @@ function startRap(){
             null, null, 0.75, hype);
       off += share;
     });
+    // the hype man echoes the landed rhyme on resolving couplet lines
+    const es = endSpan[p.l.i];
+    if(resolving && es){
+      const word = editorLines[p.l.i].slice(es.s, es.e);
+      if(word) say(word, p.at + usable + GRID * 0.3, 1, 0.82, null, null, 0.55, hype);
+    }
+    if(lastLine)
+      say('woo', p.at + p.slot + 0.15, 1.1, 0.85, null, null, 0.6, hype);
     // a quiet ad-lib in the breath at the end of every phrase — twice as
     // often in the chorus
     if(p.k % (inChorus ? 2 : 4) === (inChorus ? 1 : 3))
