@@ -1,0 +1,13 @@
+{
+  "name": "RhymePad",
+  "short_name": "RhymePad",
+  "description": "A scratchpad for poets & rappers — real phonetic rhyme detection.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#14110f",
+  "theme_color": "#14110f",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

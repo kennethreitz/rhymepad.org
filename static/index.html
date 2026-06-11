@@ -23,6 +23,8 @@
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://rhymepad.org/">
 <meta name="theme-color" content="#14110f">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -288,11 +290,40 @@
     background: var(--line); transition: background .05s;
   }
   .beat-ind span.on { background: var(--accent); }
-  footer { grid-column: 1 / -1; }
+  footer {
+    grid-column: 1 / -1;
+    color: var(--ink-dim); font-size: 12px; text-align: center; padding: 2px 0 4px;
+  }
+  footer a { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--line); }
+  footer a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  /* the explore toggle only earns its place where hover doesn't exist */
+  .touch-only { display: none; }
+  @media (any-pointer: coarse){ .touch-only { display: flex; } }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-thumb { background: #3a342d; border-radius: 6px; border: 2px solid var(--panel); }
 
   /* ---- mobile: stack the panel under the editor ---- */
+  .ghost { color: var(--ink-dim); opacity: .6; }
+  .ghost-key {
+    display: inline-block; margin-left: 7px; padding: 1px 5px;
+    border: 1px solid var(--line); border-radius: 4px;
+    font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ink-dim); opacity: .8; vertical-align: 1px;
+  }
+  .ghost-menu {
+    position: absolute; z-index: 6; min-width: 130px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 4px;
+    box-shadow: 0 10px 28px rgba(0,0,0,.5);
+  }
+  .ghost-menu .gm-item {
+    padding: 5px 10px; border-radius: 5px; cursor: pointer;
+    font-size: 13px; color: var(--ink);
+  }
+  .ghost-menu .gm-item.sel {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    color: var(--accent);
+  }
   .btn, .tab { touch-action: manipulation; }
   @media (max-width: 900px){
     .wrap {
@@ -346,9 +377,12 @@ Double-click any word to look it up on the right."></textarea>
       <button class="btn primary" id="copyBtn">Copy to clipboard</button>
       <button class="btn" id="exportBtn" title="Download this draft as a color-coded PNG">Save PNG</button>
       <button class="btn" id="shareBtn" title="Share via the system sheet — Notes, Messages, anywhere" hidden>Share</button>
+      <button class="btn" id="linkBtn" title="Copy a link that carries this whole draft — no account, no upload">Copy link</button>
       <label class="mtoggle" title="Color-code rhyme families"><input type="checkbox" id="rhymeToggle" checked> rhyme</label>
       <label class="mtoggle" title="Underline words that share an initial sound"><input type="checkbox" id="allitToggle"> alliteration</label>
       <label class="mtoggle" title="Sheet music for your flow — syllable emphasis dots under each word"><input type="checkbox" id="stressToggle"> rhythm</label>
+      <label class="mtoggle" title="A quiet rhyme suggestion at the end of the line you're writing — press Tab to take it"><input type="checkbox" id="suggestToggle" checked> suggest</label>
+      <label class="mtoggle touch-only" title="Tap any word to light up its rhyme family — the keyboard stays out of the way"><input type="checkbox" id="exploreToggle"> explore</label>
       <div class="scheme-readout" id="schemeReadout"></div>
     </div>
   </div>
@@ -398,7 +432,7 @@ Double-click any word to look it up on the right."></textarea>
     </div>
   </aside>
 
-  <footer></footer>
+  <footer>built by <a href="https://kennethreitz.org" rel="author">Kenneth Reitz</a> · <a href="https://kennethreitz.org/essays/2026-06-11-rhymepad_seeing_the_sound">how it hears rhymes</a></footer>
 </div>
 
 <script>
@@ -426,9 +460,12 @@ allitToggle.checked = false;
 allitToggle.addEventListener('change', render);
 const rhymeToggle = document.getElementById('rhymeToggle');
 rhymeToggle.checked = true;
-rhymeToggle.addEventListener('change', render);
+rhymeToggle.addEventListener('change', ()=>{
+  if(!rhymeToggle.checked && ghost){ ghost = null; closeGhostMenu(); }
+  render();
+});
 const schemeReadout = document.getElementById('schemeReadout');
-const COLORS = 12;
+const COLORS = 16;  // matches --r0..--r15 above and COLORS in app.py
 
 function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
@@ -589,6 +626,7 @@ function openDoc(id){
   analysis = null;
   renderTabs();
   render(); analyze(); editor.focus();
+  if(typeof linkSoon === 'function') linkSoon();
   const doc = docsState.docs.find(d=>d.id===id);
   if(doc && doc.sel != null){
     editor.setSelectionRange(doc.sel, doc.sel);
@@ -721,6 +759,8 @@ function render(){
       }
     }
     const lcls = 'lmark' + (/^\s*#/.test(line) ? ' hdr' : /^\s*\[/.test(line) ? ' anno' : '');
+    if(ghost && ghost.line === i && ghost.base === line)
+      h += `<span class="ghost">${line.endsWith(' ') ? '' : ' '}${esc(ghost.text)}</span><span class="ghost-key">tab</span>`;
     html += (line ? `<span class="${lcls}" data-l="${i}">${h}</span>` : '') + '\n';
   });
   highlight.innerHTML = html;
@@ -889,7 +929,13 @@ function buildReadout(){
   schemeReadout.innerHTML = parts.join(' &nbsp;&nbsp; ');
 }
 
-editor.addEventListener('input', ()=>{ render(); analyzeSoon(); });
+editor.addEventListener('input', ()=>{
+  if(ghost){
+    const cur = editor.value.split('\n')[ghost.line];
+    if(cur !== ghost.base){ ghost = null; closeGhostMenu(); }
+  }
+  render(); analyzeSoon(); ghostSoon(); linkSoon();
+});
 editor.addEventListener('scroll', ()=>{ highlight.scrollTop = stresslayer.scrollTop = editor.scrollTop; highlight.scrollLeft = stresslayer.scrollLeft = editor.scrollLeft; renderGutter(); });
 const editorShell = document.querySelector('.editor-shell');
 function setEmphasis(g){
@@ -917,8 +963,176 @@ editor.addEventListener('mousemove', e=>{
   });
 });
 editor.addEventListener('mouseleave', ()=> setEmphasis(caretGid()));
-editor.addEventListener('keyup', ()=>{ updateSpotlight(); buildReadout(); });
-editor.addEventListener('click', ()=>{ updateSpotlight(); buildReadout(); });
+editor.addEventListener('keyup', ()=>{ updateSpotlight(); buildReadout(); ghostSoon(); });
+editor.addEventListener('click', ()=>{
+  if(editor.readOnly) return;  // explore mode: pointerdown already handled it
+  updateSpotlight(); buildReadout(); ghostSoon();
+});
+
+/* ---- explore mode: hover for fingers ---------------------------------
+   On touch there's no hover, and tapping the pad summons the keyboard.
+   Explore makes the draft read-only so a tap does what the mouse does:
+   light up the rhyme family under it, keyboard nowhere in sight. */
+const exploreToggle = document.getElementById('exploreToggle');
+exploreToggle.addEventListener('change', ()=>{
+  editor.readOnly = exploreToggle.checked;
+  if(exploreToggle.checked) editor.blur();
+  else setEmphasis(caretGid());
+});
+editor.addEventListener('pointerdown', e=>{
+  if(!editor.readOnly) return;
+  e.preventDefault();  // no focus, no keyboard — scrolling still works
+  setEmphasis(gidAtPoint(e.clientX, e.clientY));
+});
+
+// ---- ghost rhyme completion: the pad suggests your landing word ----
+let ghost = null;            // {line, base, text}
+let ghostDismissed = '';     // line|base the writer waved off with Esc
+const ghostCache = {};       // target word -> ranked candidate list
+const suggestToggle = document.getElementById('suggestToggle');
+suggestToggle.checked = localStorage.getItem('rhymepad.suggest') !== '0';
+suggestToggle.addEventListener('change', ()=>{
+  localStorage.setItem('rhymepad.suggest', suggestToggle.checked ? '1' : '0');
+  if(!suggestToggle.checked && ghost){ ghost = null; render(); }
+});
+
+function caretLineCol(){
+  const pos = editor.selectionStart;
+  const before = editor.value.slice(0, pos);
+  const ln = before.split('\n').length - 1;
+  return {ln, col: pos - (before.lastIndexOf('\n') + 1)};
+}
+
+function lastWordOf(s){
+  const m = s.match(/[A-Za-z']+(?=[^A-Za-z']*$)/);
+  return m ? m[0].toLowerCase() : null;
+}
+
+async function computeGhost(){
+  const clear = ()=>{ if(ghost){ ghost = null; closeGhostMenu(); render(); } };
+  if(!suggestToggle.checked || !rhymeToggle.checked || editor.readOnly) return clear();
+  if(editor.selectionStart !== editor.selectionEnd) return clear();
+  const lines = editor.value.split('\n');
+  const {ln, col} = caretLineCol();
+  const line = lines[ln] || '';
+  // only at the very end of a line that's really being written
+  if(col !== line.length || !line.trim() || /^\s*[#\[]/.test(line)) return clear();
+  if(ghostDismissed === ln + '|' + line) return clear();
+  // the target: the previous lyric line's ending, within this stanza
+  let target = null;
+  for(let j = ln - 1; j >= 0; j--){
+    const prev = lines[j];
+    if(!prev.trim()) break;                 // stanza boundary
+    if(/^\s*[#\[]/.test(prev)) continue;  // annotations don't end lines
+    target = lastWordOf(prev);
+    break;
+  }
+  if(!target) return clear();
+  if(!(target in ghostCache)){
+    ghostCache[target] = null;  // in flight
+    try{
+      const r = await fetch(`/api/lookup?word=${encodeURIComponent(target)}&mode=rhyme`);
+      const d = await r.json();
+      ghostCache[target] = (d.words || []).map(w=>w.word.toLowerCase());
+    }catch(e){ delete ghostCache[target]; return; }
+    // the caret may have moved while we fetched
+    return computeGhost();
+  }
+  const cands = ghostCache[target];
+  if(!cands || !cands.length) return clear();
+  const cur = lastWordOf(line);
+  if(cur && (cur === target || cands.includes(cur))) return clear();  // already lands
+  // skip words already spent as line endings in this draft
+  const spent = new Set(lines.map(l=>lastWordOf(l)).filter(Boolean));
+  const avail = cands.filter(w=>!spent.has(w) && w !== cur).slice(0, 8);
+  if(!avail.length) return clear();
+  if(!ghost || ghost.line !== ln || ghost.base !== line || ghost.cands.join() !== avail.join()){
+    ghost = {line: ln, base: line, text: avail[0], cands: avail, sel: 0};
+    render();
+  }
+}
+
+// ---- the Tab dropdown: browse the candidates at the caret ----
+let ghostMenu = null;
+function closeGhostMenu(){ if(ghostMenu){ ghostMenu.remove(); ghostMenu = null; } }
+function acceptGhost(word){
+  const pos = editor.selectionStart;
+  const line = editor.value.split('\n')[ghost.line] || '';
+  const insert = (line.endsWith(' ') ? '' : ' ') + word;
+  editor.setRangeText(insert, pos, pos, 'end');
+  ghost = null; closeGhostMenu();
+  render(); analyzeSoon(); buildReadout();
+  editor.focus();
+}
+function openGhostMenu(){
+  closeGhostMenu();
+  if(!ghost) return;
+  ghostMenu = document.createElement('div');
+  ghostMenu.className = 'ghost-menu';
+  ghost.cands.forEach((w, i)=>{
+    const it = document.createElement('div');
+    it.className = 'gm-item' + (i === ghost.sel ? ' sel' : '');
+    it.textContent = w;
+    it.addEventListener('mousedown', e=>e.preventDefault());  // keep editor focus
+    it.addEventListener('click', ()=>acceptGhost(w));
+    it.addEventListener('mouseenter', ()=>{ ghost.sel = i; ghost.text = w; render(); paintGhostMenu(); });
+    ghostMenu.appendChild(it);
+  });
+  editorShell.appendChild(ghostMenu);
+  positionGhostMenu();
+}
+function paintGhostMenu(){
+  if(!ghostMenu) return;
+  [...ghostMenu.children].forEach((el, i)=>el.classList.toggle('sel', i === ghost.sel));
+}
+function positionGhostMenu(){
+  if(!ghostMenu) return;
+  const g = highlight.querySelector('.ghost');
+  if(!g){ closeGhostMenu(); return; }
+  const sr = editorShell.getBoundingClientRect(), gr = g.getBoundingClientRect();
+  let left = gr.left - sr.left, top = gr.bottom - sr.top + 6;
+  left = Math.min(left, sr.width - ghostMenu.offsetWidth - 10);
+  if(top + ghostMenu.offsetHeight > sr.height - 8)
+    top = gr.top - sr.top - ghostMenu.offsetHeight - 6;  // flip above
+  ghostMenu.style.left = Math.max(8, left) + 'px';
+  ghostMenu.style.top = Math.max(8, top) + 'px';
+}
+const ghostSoon = debounce(computeGhost, 300);
+
+editor.addEventListener('keydown', e=>{
+  if(ghostMenu && ghost){
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      const n = ghost.cands.length;
+      ghost.sel = (ghost.sel + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
+      ghost.text = ghost.cands[ghost.sel];
+      render(); paintGhostMenu(); positionGhostMenu();
+      return;
+    }
+    if(e.key === 'Enter' || e.key === 'Tab'){
+      e.preventDefault(); acceptGhost(ghost.cands[ghost.sel]); return;
+    }
+    if(e.key === 'Escape'){ e.preventDefault(); closeGhostMenu(); return; }
+    closeGhostMenu();  // any other key: back to writing
+    return;
+  }
+  if(e.key === 'Tab' && ghost){
+    const {ln, col} = caretLineCol();
+    const line = editor.value.split('\n')[ln] || '';
+    if(ln === ghost.line && col === line.length && line === ghost.base){
+      e.preventDefault();
+      openGhostMenu();
+      return;
+    }
+  }
+  if(e.key === 'Escape' && ghost){
+    const lines2 = editor.value.split('\n');
+    ghostDismissed = ghost.line + '|' + lines2[ghost.line];
+    ghost = null; render();
+  }
+});
+editor.addEventListener('scroll', closeGhostMenu);
+editor.addEventListener('blur', ()=>setTimeout(closeGhostMenu, 150));
 
 /* ---------- double-click (or touch-select) a word -> look it up ---------- */
 function lookupSelection(){
@@ -1361,20 +1575,76 @@ lookupInput.addEventListener('paste', e=>{
 /* ============================================================
    FILES IN, FILES OUT — drafts shouldn't be hostage to localStorage
 ============================================================ */
+// ---- share links: the draft itself, gzipped into the URL fragment ----
+async function gzB64(str){
+  const cs = new CompressionStream('gzip');
+  const blob = new Blob([new TextEncoder().encode(str)]);
+  const buf = await new Response(blob.stream().pipeThrough(cs)).arrayBuffer();
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function gunzB64(b64){
+  const bin = atob(b64.replace(/-/g,'+').replace(/_/g,'/'));
+  const bytes = Uint8Array.from(bin, c=>c.charCodeAt(0));
+  const ds = new DecompressionStream('gzip');
+  const buf = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
+  return new TextDecoder().decode(buf);
+}
+async function draftLink(){
+  const doc = docsState.docs.find(d=>d.id===docsState.current);
+  const payload = JSON.stringify({t: doc ? doc.title : 'Untitled', x: editor.value});
+  const enc = await gzB64(payload);
+  if(enc.length > 7000) return null;  // past sane URL territory
+  return location.origin + '/#d=' + enc;
+}
+// the link is encoded eagerly in the background, so the click handlers
+// stay synchronous — an await before share()/writeText() voids the
+// user gesture and the browser refuses the share sheet
+let linkCache = null;
+const linkSoon = debounce(async ()=>{
+  linkCache = editor.value.trim() ? await draftLink() : null;
+}, 400);
+linkSoon();
+
+const linkBtn = document.getElementById('linkBtn');
+linkBtn.addEventListener('click', ()=>{
+  if(!editor.value.trim()) return;
+  if(!linkCache){ flash('linkBtn', 'Too long for a link'); return; }
+  navigator.clipboard.writeText(linkCache)
+    .then(()=>flash('linkBtn', 'Link copied \u2713'))
+    .catch(()=>flash('linkBtn', 'Copy failed'));
+});
+
 const shareBtn = document.getElementById('shareBtn');
 if(navigator.share){
   shareBtn.hidden = false;
-  shareBtn.addEventListener('click', async ()=>{
+  shareBtn.addEventListener('click', ()=>{
     if(!editor.value.trim()) return;
     const doc = docsState.docs.find(d=>d.id===docsState.current);
-    try{
-      await navigator.share({
-        title: (doc && doc.title !== 'Untitled') ? doc.title : 'RhymePad draft',
-        text: editor.value,
-      });
-    }catch(e){ /* user closed the sheet */ }
+    navigator.share({
+      title: (doc && doc.title !== 'Untitled') ? doc.title : 'RhymePad draft',
+      text: editor.value,
+      ...(linkCache ? {url: linkCache} : {}),
+    }).catch(()=>{ /* user closed the sheet */ });
   });
 }
+
+// an incoming #d= link becomes a fresh draft, never clobbering yours
+(async function importHash(){
+  if(!location.hash.startsWith('#d=')) return;
+  try{
+    const {t, x} = JSON.parse(await gunzB64(location.hash.slice(3)));
+    if(typeof x !== 'string' || !x.trim()) return;
+    newDoc();
+    const doc = docsState.docs.find(d=>d.id===docsState.current);
+    doc.title = (t && t !== 'Untitled') ? t : 'Shared draft';
+    editor.value = x;
+    localStorage.setItem(docKey(docsState.current), x);
+    saveDocs(); renderTabs();
+    render(); analyzeSoon();
+  }catch(e){ /* malformed link — ignore */ }
+  history.replaceState(null, '', location.pathname);
+})();
 // drop a .txt (or any text file) anywhere -> it becomes a new draft
 document.addEventListener('dragover', e=>{ e.preventDefault(); });
 document.addEventListener('drop', async e=>{
