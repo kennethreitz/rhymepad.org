@@ -815,14 +815,19 @@ async function computeGhost(){
     gap = analysis.meter[tline].syl - analysis.meter[ln].syl;
   // a completion's typed vowels are already counted in this line's bar
   const pv = partial ? (partial.match(/[aeiouy]+/g) || []).length : 0;
+  // tier order is the product: completions of what's typed, then
+  // idiom-completers (trigram — sharp), then song echoes, then rhyme
+  // quality. The loose bigram only breaks ties BELOW rhyme quality —
+  // "the guy" must never beat a perfect rhyme ("the light").
   avail = avail.map((c, i)=>({c, i,
       p: c.comp ? 0 : 1,
-      ph: follows.tri.has(c.word.split(' ')[0]) ? 0      // completes the idiom
-        : follows.bi.has(c.word.split(' ')[0]) ? 1 : 2,  // reads like a phrase
+      t: follows.tri.has(c.word.split(' ')[0]) ? 0 : 1,
       f: -(c.fitn || 0),
-      m: gap >= 1 ? Math.abs((c.comp ? c.syl - pv : c.syl) - gap) : 0,
-      n: c.near ? 1 : 0}))
-    .sort((a, b)=>a.p - b.p || a.ph - b.ph || a.f - b.f || a.m - b.m || a.n - b.n || a.i - b.i)
+      n: c.near ? 1 : 0,
+      b: follows.bi.has(c.word.split(' ')[0]) ? 0 : 1,
+      m: gap >= 1 ? Math.abs((c.comp ? c.syl - pv : c.syl) - gap) : 0}))
+    .sort((a, b)=>a.p - b.p || a.t - b.t || a.f - b.f || a.n - b.n
+                || a.b - b.b || a.m - b.m || a.i - b.i)
     .map(x=>x.c);
   avail = avail.slice(0, 8);
   const sig = avail.map(c=>c.word + (c.comp ? '+' : '')).join();
