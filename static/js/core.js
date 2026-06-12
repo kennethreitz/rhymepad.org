@@ -765,6 +765,10 @@ let lastType = 0;        // when the writer last touched a key
 let forceGhost = false;  // Tab asked for the ghost explicitly
 let idleTimer = null;
 const GHOST_IDLE = 800;  // a real pause, not a breath between words
+// words the writer walked past (Enter) or waved off (Esc) — offering
+// the same word line after line is nagging, not helping. Tab still
+// shows everything.
+const ghostPassed = new Set();
 
 async function computeGhost(){
   const clear = ()=>{ if(ghost){ ghost = null; closeGhostMenu(); render(); } };
@@ -799,7 +803,8 @@ async function computeGhost(){
   const partial = /[A-Za-z']$/.test(line) ? cur : null;
   // skip words already spent as line endings in this draft
   const spent = new Set(lines.map(l=>lastWordOf(l)).filter(Boolean));
-  let avail = cands.filter(c=>!spent.has(c.word.split(' ').pop()) && c.word !== cur)
+  let avail = cands.filter(c=>!spent.has(c.word.split(' ').pop()) && c.word !== cur
+                             && (forceGhost || !ghostPassed.has(c.word)))
     .map(c=>({...c, comp: !!(partial && c.word.startsWith(partial)
                              && c.word.length > partial.length)}));
   if(!avail.length) return clear();
@@ -972,7 +977,11 @@ editor.addEventListener('keydown', e=>{
       return;
     }
   }
+  if(e.key === 'Enter' && ghost && !ghostMenu){
+    ghostPassed.add(ghost.text);  // walked past it — don't re-offer
+  }
   if(e.key === 'Escape' && ghost){
+    ghostPassed.add(ghost.text);
     ghostDismissed = ghost.line + '|' + (ghost.target || '');
     ghost = null; render();
   }
