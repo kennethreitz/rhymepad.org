@@ -821,3 +821,9 @@ def test_audit_famous_rhymes():
 def test_audit_non_rhymes_stay_apart():
     fps = [(a, b) for a, b in AUDIT_NOT if _pair_rhymes(a, b)]
     assert not fps, f"audit false positives: {fps}"
+
+
+def test_schwa_front_syllable_is_no_anchor():
+    # a-FECT and e-SPE-cially share an unstressed schwa + EH — that's
+    # not a rhyme a listener hears
+    assert not _pair_rhymes("affect", "especially")

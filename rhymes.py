@@ -434,7 +434,13 @@ def multi_keys(word: str) -> tuple[str, ...]:
             if p[-1] == "1":
                 anchors.add(i)
                 break
-        anchors.add(0)  # the front syllable always anchors: BALL-game
+        # the front syllable anchors when it's a real vowel sound:
+        # BALL-game (AA) yes; a-FECT's schwa is no anchor at all
+        for i, p in enumerate(pl):
+            if p[-1].isdigit():
+                if not (p[-1] == "0" and DIGITS.sub("", p) in REDUCED):
+                    anchors.add(i)
+                break
         for a in anchors:
             syls = [p for p in pl[a:] if p[-1].isdigit()]
             vs = [DIGITS.sub("", p) for p in syls]
