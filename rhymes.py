@@ -205,13 +205,13 @@ def _iy_reduced(syls: list[str]) -> list[str] | None:
     """The "happy vowel" elides in flow: MEN-y-a-PILL ~ BEN-a-DRYL.
     Returns the vowel run with unstressed IY (and other reduced vowels)
     folded to x and runs of x collapsed — or None if nothing changes."""
-    if not any(p.startswith("IY") and p.endswith("0") for p in syls[1:]):
+    if not any(p.endswith("0") and p[:2] in ("IY", "EH") for p in syls[1:]):
         return None
     out = [DIGITS.sub("", syls[0])]
     for p in syls[1:]:
         v = DIGITS.sub("", p)
         # only UNSTRESSED vowels fold — a stressed IH/AH is a real beat
-        x = p.endswith("0") and (p.startswith("IY") or v in REDUCED)
+        x = p.endswith("0") and (p[:2] in ("IY", "EH") or v in REDUCED)
         if x and out[-1] == "x":
             continue  # elided fillers collapse onto the same off-beat
         out.append("x" if x else v)
@@ -447,11 +447,12 @@ def multi_keys(word: str) -> tuple[str, ...]:
             k = _multi_key(vs)
             if k:
                 out.append(k)
-            # the "happy vowel": unstressed IY reduces in flow, so
-            # ob-LIV-i-ous (IH-IY-x) can meet ri-DIC-u-lous (IH-x)
-            if any(p.startswith("IY") and p.endswith("0") for p in syls[1:]):
-                vs2 = [vs[0]] + ["x" if s.startswith("IY") and s.endswith("0")
-                                 else v for v, s in zip(vs[1:], syls[1:])]
+            # unstressed IY (happy vowel) and EH reduce in flow, so
+            # ob-LIV-i-ous meets ri-DIC-u-lous and CON-fi-dence NON-sense
+            fold = lambda s: s.endswith("0") and s[:2] in ("IY", "EH")
+            if any(fold(p) for p in syls[1:]):
+                vs2 = [vs[0]] + ["x" if fold(s) else v
+                                 for v, s in zip(vs[1:], syls[1:])]
                 k = _multi_key(vs2)
                 if k:
                     out.append(k)
@@ -479,6 +480,28 @@ def weak_end_key(word: str) -> str | None:
             out = [syl[0]] + [_coda_class(c) for c in syl[1:]]
             return "w:" + " ".join(out)
     return None
+
+
+def weak2_end_key(word: str) -> str | None:
+    """Dactylic ending: the last TWO syllables when both are unstressed
+    (conSIDering / GATHering rhyme on '-ering' even though their
+    stressed vowels disagree). Coda-classed like weak_end_key."""
+    ph = phones_for(word)
+    if not ph:
+        return None
+    pl = ph.split()
+    vidx = [i for i, p in enumerate(pl) if p[-1].isdigit()]
+    if len(vidx) < 3:
+        return None  # needs a stressed body BEFORE the two-syllable tail
+    a, b = vidx[-2], vidx[-1]
+    if not (pl[a].endswith("0") and pl[b].endswith("0")):
+        return None
+    tail = pl[a:]
+    out = []
+    for p in tail:
+        v = DIGITS.sub("", p)
+        out.append(v if p[-1].isdigit() else _coda_class(v))
+    return "w2:" + " ".join(out)
 
 
 def slant_key(word: str) -> str | None:
@@ -1097,12 +1120,79 @@ def analyze_text(text: str) -> dict:
         key = weak_end_key(t["word"])
         if key:
             attach_or_collect(t, key, by_weak, group_by_weak)
+        k2 = weak2_end_key(t["word"])
+        if k2 and id(t) not in grouped:
+            by_weak[(t["sid"], k2)].append(t)
     for (sid, key), toks in sorted(by_weak.items(),
                                    key=lambda kv: (-len(kv[1]), kv[0][1])):
         toks = [t for t in toks if id(t) not in grouped]
         if len(toks) >= 2 and len({t["word"].lower() for t in toks}) >= 2:
             raw_groups.append({"toks": toks, "slant": True, "key": key})
             grouped.update(id(t) for t in toks)
+
+    # pass 6: an UNANSWERED ending may reach into a nearby stanza for
+    # its partner — poets thread stanza ends (evening -> dreaming ->
+    # meaning). An ending already answered at home never reaches out,
+    # so paired quatrains (light/night || bright/sight) stay separate.
+    def _end_keys(w):
+        # bridging is long-range, so only RICH keys qualify: perfect
+        # rimes, non-weak multis, and multi-vowel slants. A bare V-x or
+        # single-vowel key reaching across stanzas is how wish meets
+        # think — nobody hears that
+        ks = set(rime_keys(w))
+        ks |= {k for k in multi_keys(w) if not WEAK_MK.match(k)}
+        sk = slant_key(w)
+        if sk and " " in sk:
+            ks.add(sk)
+        return ks
+
+    orphans = [t for t in tokens
+               if t["is_end"] and id(t) not in grouped
+               and " " not in t["word"]
+               and t["word"].lower() not in STOPWORDS
+               and t["word"].lower() not in refrain]
+    okeys = {id(t): _end_keys(t["word"]) for t in orphans}
+    # first try joining an existing family with end-members nearby
+    for t in orphans:
+        for gi, g in enumerate(raw_groups):
+            ends = [m for m in g["toks"] if m["is_end"] and " " not in m["word"]]
+            if not any(m["sid"] != t["sid"]
+                       and abs(m["line"] - t["line"]) <= 8 for m in ends):
+                continue
+            gks = set()
+            for m in ends:
+                gks |= _end_keys(m["word"])
+            if okeys[id(t)] & gks:
+                g["toks"].append(t)
+                t["slant"] = True
+                grouped.add(id(t))
+                break
+    # then let orphans pair with each other across stanzas
+    bridge = defaultdict(list)
+    for t in orphans:
+        if id(t) in grouped:
+            continue
+        for k in okeys[id(t)]:
+            bridge[k].append(t)
+    for k, toks in sorted(bridge.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+        toks = sorted((t for t in toks if id(t) not in grouped),
+                      key=lambda t: t["line"])
+        # chain locality: split on gaps wider than 8 lines
+        runs, cur = [], []
+        for t in toks:
+            if cur and t["line"] - cur[-1]["line"] > 8:
+                runs.append(cur)
+                cur = []
+            cur.append(t)
+        if cur:
+            runs.append(cur)
+        for run in runs:
+            if (len(run) >= 2
+                    and len({t["word"].lower() for t in run}) >= 2
+                    and len({t["sid"] for t in run}) >= 2):
+                raw_groups.append({"toks": run, "slant": True, "key": k})
+                grouped.update(id(t) for t in run)
+
 
     # stopword-anchored phrases ("were up") never compete on their own,
     # but an exact rime match against any grouped token lets them ride

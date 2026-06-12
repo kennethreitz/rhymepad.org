@@ -798,6 +798,7 @@ AUDIT_SHOULD = [
     ("skrrt", "hurt"), ("bruh", "duh"), ("thang", "bang"),
     ("Babolats", "cats"), ("Maybach", "way back"), ("Patek", "check"),
     ("Balmain", "ballgame"), ("guap", "drop"),
+    ("confidence", "nonsense"),
 ]
 AUDIT_NOT = [
     ("garbage", "javascript"), ("middle", "unavoidable"),
@@ -827,3 +828,18 @@ def test_schwa_front_syllable_is_no_anchor():
     # a-FECT and e-SPE-cially share an unstressed schwa + EH — that's
     # not a rhyme a listener hears
     assert not _pair_rhymes("affect", "especially")
+
+
+def test_unanswered_ends_bridge_nearby_stanzas():
+    # evening -> dreaming -> meaning thread across three stanzas: each
+    # is unanswered at home, so it may reach out
+    text = ("especially on this evening\nI can't quite seem to think\n\n"
+            "that I circle around\nwhat my mind is dreaming\n\n"
+            "down on myself\nI don't find much meaning")
+    group_with(text, "evening", "dreaming", "meaning")
+
+
+def test_dactylic_endings_rhyme():
+    # conSIDering / GATHering rhyme on their unstressed '-ering' tail
+    text = "worth considering\nat any old dinner gathering"
+    group_with(text, "considering", "gathering")
