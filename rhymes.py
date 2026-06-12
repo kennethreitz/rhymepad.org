@@ -916,12 +916,44 @@ def analyze_text(text: str) -> dict:
         else:
             by_slant[(p["sid"], key)].append(p)
 
+    def _coda_sonority(word: str) -> str:
+        """Open / nasal / liquid / obstruent class of a word's final coda
+        — the ear groups bare-vowel slants by HOW the syllable closes."""
+        ph = phones_for(word.split()[-1])
+        if not ph:
+            return "?"
+        pl = ph.split()
+        last = max((i for i, p in enumerate(pl) if p[-1].isdigit()), default=-1)
+        coda = [DIGITS.sub("", p) for p in pl[last + 1:]]
+        if not coda:
+            return "."
+        c = coda[0]
+        if c in NASALS:
+            return "N"
+        if c in ("L", "R"):
+            return "L"
+        return "O"
+
     for (sid, key), toks in sorted(by_slant.items(),
                                    key=lambda kv: (-len(kv[1]), kv[0][1])):
         toks = [t for t in toks if id(t) not in grouped]
-        if len(toks) >= 2 and len({t["word"].split()[0] for t in toks}) >= 2:
-            raw_groups.append({"toks": toks, "slant": True, "key": key})
-            grouped.update(id(t) for t in toks)
+        if len(toks) < 2:
+            continue
+        # a single bare vowel is the loosest evidence there is: leftovers
+        # may FOUND a group on it only when their codas close the same
+        # way (time/mind both nasal; detail-L / brain-N do not rhyme).
+        # Richer keys (2+ vowels) keep the old behavior.
+        if " " not in key[2:]:
+            runs = defaultdict(list)
+            for t in toks:
+                runs[_coda_sonority(t["word"])].append(t)
+            subsets = [v for v in runs.values()]
+        else:
+            subsets = [toks]
+        for sub in subsets:
+            if len(sub) >= 2 and len({t["word"].split()[0] for t in sub}) >= 2:
+                raw_groups.append({"toks": sub, "slant": True, "key": key})
+                grouped.update(id(t) for t in sub)
 
     # pass 3: multisyllabic slant rhymes anywhere in a line, per stanza —
     # tokens sharing a 2+ vowel run from the stressed syllable on

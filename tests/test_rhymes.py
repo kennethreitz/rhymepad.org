@@ -934,3 +934,11 @@ def test_unstressed_schwa_is_no_assonance_key():
     assert not any({"the", "and"} <= s for s in bg.values())
     # stressed AH keeps its assonance: blood / cup
     group_with("in my blood\nraise the cup", "blood", "cup")
+
+
+def test_bare_vowel_slant_needs_matching_closure():
+    # detail (liquid L) and brain (nasal N) share only EY — not a rhyme
+    res = analyze(Draft(text="every detail\nin my brain"))
+    assert not res["tokens"]
+    # but time/mind (both nasal closures) still found their slant group
+    group_with("i lost the time\nin my mind", "time", "mind")
