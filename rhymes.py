@@ -1423,16 +1423,25 @@ def analyze_text(text: str) -> dict:
     groups_out = []
     chosen: list[int] = []
     usage = [0] * COLORS
+    key_color: dict[str, int] = {}  # same sound, same color, across stanzas
     for gid, g in enumerate(raw_groups):
         for t in g["toks"]:
             t["gid"] = gid
         blocked = {chosen[j] for j in range(gid) if grown[j] & line_sets[gid]}
-        # among non-adjacent colors, take the globally least-used one, so
-        # hues spread evenly instead of piling on the low indices
-        avail = [c for c in range(COLORS) if c not in blocked] or list(range(COLORS))
-        color = min(avail, key=lambda c: (usage[c], c))
+        # a family with the same founding sound as an earlier one (the
+        # paired quatrain, the repeated chorus) wears the same color —
+        # unless that would collide with a visually adjacent family
+        prior = key_color.get(g["key"])
+        if prior is not None and prior not in blocked:
+            color = prior
+        else:
+            # among non-adjacent colors, take the globally least-used one,
+            # so hues spread evenly instead of piling on the low indices
+            avail = [c for c in range(COLORS) if c not in blocked] or list(range(COLORS))
+            color = min(avail, key=lambda c: (usage[c], c))
         usage[color] += 1
         chosen.append(color)
+        key_color.setdefault(g["key"], color)
         sound = re.sub(r"^[a-z0-9]+:", "", g["key"]).replace("|", " ").lower()
         k = g["key"]
         strength = (1.0 if k.startswith("p:")        # perfect rime

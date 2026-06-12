@@ -843,3 +843,18 @@ def test_dactylic_endings_rhyme():
     # conSIDering / GATHering rhyme on their unstressed '-ering' tail
     text = "worth considering\nat any old dinner gathering"
     group_with(text, "considering", "gathering")
+
+
+def test_same_sound_same_color_across_stanzas():
+    # stanza-scoped families with the same founding sound share a color
+    text = ("the city light\nshines every night\n\n"
+            "the future's bright\nit's in my sight")
+    res = analyze(Draft(text=text))
+    gcolor = {g["id"]: g["color"] for g in res["groups"]}
+    fams = defaultdict(set)
+    for t in res["tokens"]:
+        fams[t["g"]].add(res["lines"][t["l"]][t["s"]:t["e"]].lower())
+    gids = [g for g, s in fams.items() if s & {"light", "bright"}]
+    assert len(gids) == 2          # still two separate families
+    a, b = gids
+    assert gcolor[a] == gcolor[b]  # ...wearing the same color
