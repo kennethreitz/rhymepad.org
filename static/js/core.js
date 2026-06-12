@@ -906,9 +906,14 @@ async function doLookup(){
   defBox.innerHTML = `<div class="defhead"><b>${esc(word)}</b></div>` +
     `<div class="muted defphon" id="defPhon">…</div>`;
   resultsBox.innerHTML = '<p class="muted">gathering…</p>';
+  // rhymes go draft-aware when there's a draft to be aware of
+  const rhymeReq = editor.value.trim()
+    ? fetch('/api/suggest', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({word, text: editor.value})})
+    : fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=rhyme`);
   const [info, rhyme, syn, desc, trig] = await Promise.all([
     fetch(`/api/word?word=${encodeURIComponent(word)}`).then(r=>r.json()).catch(()=>null),
-    fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=rhyme`).then(r=>r.json()).catch(()=>null),
+    rhymeReq.then(r=>r.json()).catch(()=>null),
     fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=syn`).then(r=>r.json()).catch(()=>null),
     fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=desc`).then(r=>r.json()).catch(()=>null),
     fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=trig`).then(r=>r.json()).catch(()=>null),
@@ -955,7 +960,9 @@ function chipHtml(items, cls){
       const w = d.word || d, r = rarity(d.z);
       const used = inDraft.has(w.toLowerCase()) ? ' indraft' : '';
       const ch = d.chime === 'perfect' ? ' chime' : (d.chime === 'near' ? ' chime soft' : '');
-      return `<span class="chip${cls ? ' ' + cls : ''}${r}${used}${ch}" data-w="${esc(w)}">${esc(w)}</span>`;
+      const fit = d.fit ? ' fits' : '';
+      const tip = d.fit ? ` title="echoes “${esc(d.fit)}” in your draft"` : '';
+      return `<span class="chip${cls ? ' ' + cls : ''}${r}${used}${ch}${fit}" data-w="${esc(w)}"${tip}>${esc(w)}</span>`;
     }).join('') + '</div>';
 }
 

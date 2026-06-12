@@ -2135,6 +2135,61 @@ def lookup_data(word: str, mode: str = "rhyme", limit: int = 60):
             "near": near, "rhyme_on": rhyme_on, "multis": multis}
 
 
+DRAFT_WORD = re.compile(r"[a-z'][a-z']+")
+
+
+def draft_context(text: str, top: int = 48) -> list[str]:
+    """The draft's content words — what the song is about. Distinct, in
+    order of appearance; filler and ultra-common words drop out on
+    frequency."""
+    out: list[str] = []
+    seen = set()
+    for w in DRAFT_WORD.findall(text.lower()):
+        if w in seen or len(w) < 3:
+            continue
+        seen.add(w)
+        if 1.5 <= zipf_frequency(w, "en") <= 5.4:
+            out.append(w)
+            if len(out) >= top:
+                break
+    return out
+
+
+def suggest_data(word: str, text: str, limit: int = 60):
+    """Rhyme lookup that knows the draft. Candidates connected to the
+    draft's content words through the association/describes tables --
+    either direction -- carry a "fit" naming the connecting word, and
+    float first in their list: rhymes that fit the song, not just the
+    sound."""
+    base = lookup_data(word, mode="rhyme", limit=limit)
+    ctx = draft_context(text)
+    if not base.get("known") or not ctx:
+        return base
+    tr, de = get_associations(), get_describes()
+    summoned: dict[str, str] = {}   # candidate -> draft word it echoes
+    for d in ctx:
+        for n in (tr.get(d) or []) + (de.get(d) or []):
+            summoned.setdefault(n, d)
+    ctx_set = set(ctx)
+
+    def fit_of(cand: str) -> str | None:
+        via = summoned.get(cand)
+        if via is None:
+            hits = ctx_set.intersection(tr.get(cand) or [])
+            via = next(iter(hits), None)
+        if via is None or via[:4] == cand[:4]:  # skip self/kin echoes
+            return None
+        return via
+
+    for lst in (base["words"], base["near"]):
+        for d in lst:
+            via = fit_of(d["word"])
+            if via:
+                d["fit"] = via
+        lst.sort(key=lambda d: "fit" not in d)  # stable: fits lead
+    return base
+
+
 # ---------------------------------------------------------------- share OG
 # Shared drafts travel as ?d=<gzip+base64url> — the server renders the
 # actual verse, color-coded, as the social preview card.

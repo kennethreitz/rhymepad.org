@@ -63,6 +63,18 @@ def word_info(word: str):
 def lookup(word: str, mode: str = "rhyme", limit: int = 60):
     return rhymes.lookup_data(word, mode=mode, limit=limit)
 
+
+class SuggestReq(BaseModel):
+    word: str
+    text: str
+
+
+@app.post("/api/suggest")
+def suggest(req: SuggestReq):
+    """Rhymes for a word, draft-aware: candidates that echo what the
+    draft is about lead the list."""
+    return rhymes.suggest_data(req.word, req.text[:rhymes.MAX_DRAFT])
+
 OG_PALETTE = ["#e8814a", "#4ea3e8", "#6fd08c", "#d46fb8",
               "#e8c54a", "#9b7ce8", "#e85a5a", "#46cabf",
               "#c0d44e", "#ee5d8f", "#6f8bf2", "#8fe85a",

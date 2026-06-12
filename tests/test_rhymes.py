@@ -625,6 +625,21 @@ def test_lookup_desc_unknown_word_is_quiet():
     assert lookup("xqzzqx", mode="desc")["known"] is False
 
 
+def test_suggest_rhymes_know_the_draft():
+    # in a draft about fire and smoke, "higher" candidates that echo the
+    # scene (fire/pyre via "lit") lead the list, tagged with the link
+    draft = "i lit a match to see her face\nand lost it in the fire"
+    r = rhymes.suggest_data("higher", draft)
+    fits = {d["word"]: d["fit"] for d in r["words"] if "fit" in d}
+    assert "pyre" in fits
+    assert r["words"][0].get("fit")  # fitting rhymes float first
+
+
+def test_suggest_without_draft_is_plain_lookup():
+    r = rhymes.suggest_data("higher", "")
+    assert r["known"] and not any("fit" in d for d in r["words"])
+
+
 def test_meaning_chips_chime_when_they_rhyme():
     # a synonym that also rhymes is the jackpot — it floats first, gold
     data = lookup("light", mode="syn")

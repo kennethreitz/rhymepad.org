@@ -305,6 +305,9 @@
   .chip.chime::before { content: "♪ "; color: var(--accent-2); }
   .chip.chime.soft { border-color: color-mix(in srgb, var(--accent-2) 40%, var(--line)); }
   .chip.chime.soft::before { opacity: .55; }
+  /* rhyme chips that echo what the draft is about — orange = your song */
+  .chip.fits { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+  .chip.fits:not(.indraft)::after { content: " ✦"; color: var(--accent); }
   .muted { color: var(--ink-dim); font-size: 13px; line-height: 1.6; }
   .res-label { font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-dim); margin:16px 0 4px; }
 
