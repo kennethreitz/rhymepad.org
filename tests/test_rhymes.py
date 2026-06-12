@@ -134,8 +134,11 @@ def test_no_transitive_chaining():
             "People say I'm borderline crazy, sorta, kinda\n"
             "Woman of my dreams, I don't sleep, so I can't find her")
     whats = group_with(text, "what's", "peanuts")
-    assert "sleep" not in whats and "people" not in whats
-    sleep = group_with(text, "sleep", "people")
+    assert "people" not in whats
+    assert not any("sleep" in w for w in whats)
+    # the IY-x rhyme may surface as the word or as the «Sleep is» mosaic
+    sleep = group_with(text, "people")
+    assert any("sleep" in w for w in sleep)
     assert "what's" not in sleep
 
 
@@ -799,10 +802,22 @@ AUDIT_SHOULD = [
     ("Babolats", "cats"), ("Maybach", "way back"), ("Patek", "check"),
     ("Balmain", "ballgame"), ("guap", "drop"),
     ("confidence", "nonsense"),
+    # the rhyme-type canon (poetrysoup taxonomy)
+    ("immeasurable", "pleasurable"),   # perfect dactylic
+    ("poet", "know it"),               # mosaic — the classic example
+    ("spirit", "merit"),               # syllabic, front-vowel ladder
+    ("trail", "railing"),              # trailing
+    ("sun", "cunning"),                # semi-rhyme
+    ("atone", "telephone"),            # light/imperfect
 ]
 AUDIT_NOT = [
     ("garbage", "javascript"), ("middle", "unavoidable"),
     ("orange", "purple"), ("table", "people"), ("quick", "meticulous"),
+    # forms the philosophy rejects: spelling, suffix-only, frame-only
+    ("love", "move"),          # eye-rhyme
+    ("nation", "fusion"),      # wrench (-tion alone)
+    ("slaughter", "murder"),   # weak -er alone
+    ("tell", "tall"),          # para-rhyme
 ]
 
 
@@ -811,7 +826,8 @@ def _pair_rhymes(a, b):
     bg = defaultdict(set)
     for t in res["tokens"]:
         bg[t["g"]].add(res["lines"][t["l"]][t["s"]:t["e"]].lower())
-    return any(a.lower() in s and b.lower() in s for s in bg.values())
+    return any(any(a.lower() in w for w in s) and any(b.lower() in w for w in s)
+               for s in bg.values())
 
 
 def test_audit_famous_rhymes():

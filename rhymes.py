@@ -88,6 +88,7 @@ OVERRIDES = {
     "maybach": "M EY1 B AE2 K",    # as rapped: "may-back"
     "balmain": "B AO1 L M EY2 N",  # as rapped: "ball-MAIN"
     "patek": "P AH0 T EH1 K",      # CMU stresses PAH-tek; rap says pa-TEK
+    "immeasurable": "IH2 M EH1 ZH ER0 AH0 B AH0 L",  # CMU has a stray AE2
 }
 
 
@@ -497,8 +498,11 @@ def slant_variants(word: str) -> tuple[str, ...]:
         return ()
     out = [sk]
     vs = sk[2:].split()
-    if len(vs) >= 2 and vs[0] == "IH":
-        out.append("v:" + " ".join(["IY"] + vs[1:]))
+    if len(vs) >= 2 and vs[0] in ("IY", "IH", "EH"):
+        # the front ladder IY-IH-EH: neighbor heads merge when a shared
+        # unstressed tail carries them (THINK-ing/DREAM-ing,
+        # SPIR-it/MER-it). Normalized to IH so one hop covers the ladder.
+        out.append("v:" + " ".join(["IH"] + vs[1:]))
     return tuple(out)
 
 
@@ -683,9 +687,15 @@ def analyze_text(text: str) -> dict:
                 "rime": DIGITS.sub("", " ".join(pl[start:] + pb.split())),
                 # a phrase touching a stopword ("were up") may still match
                 # perfectly, but never competes in the vowel-only passes
+                # a stopword-anchored phrase ("were up") never competes
+                # in the vowel passes; a content anchor whose stopword
+                # tail is a CLOSED syllable carries a real mosaic rhyme
+                # (poet / know it) — an open tail just dangles
                 "weak": (a["word"].lower() in STOPWORDS
-                         or b["word"].lower() in STOPWORDS
-                         or b["word"].lower() in refrain),
+                         or b["word"].lower() in refrain
+                         or (b["word"].lower() in STOPWORDS
+                             and pb.split()[-1][-1].isdigit())),
+                "stoptail": b["word"].lower() in STOPWORDS,
             })
 
     # mosaic triples: three-word runs whose vowel run is the rhyme —
@@ -950,10 +960,13 @@ def analyze_text(text: str) -> dict:
             continue
         vs = p["vowels"]
         full = sum(1 for v in vs if v not in REDUCED)
-        if len(vs) >= 3 or (len(vs) == 2 and vs[1] not in REDUCED):
+        if (len(vs) >= 3 or (len(vs) == 2 and vs[1] not in REDUCED)
+                or p.get("stoptail")):
+            # V+schwa normally needs consonant support, but a stopword
+            # tail (poet / know it) competes only for word families,
+            # where the coda-gated weak buckets contain the looseness
             key = _multi_key(vs)
         else:
-            # V+schwa phrases must bring consonant support
             key = _m2_key(p["rime"].split())
         if not key:
             continue
@@ -970,9 +983,14 @@ def analyze_text(text: str) -> dict:
         if full < 2 and not key.startswith("m2:"):
             # a schwa-heavy run can't barge into a word family ("Two
             # bitches" -> the Tuna chain), but parallel phrases may pair
-            # with each other (clock's ticking / stop tripping)
-            by_par[(p["sid"], key)].append(p)
-            continue
+            # with each other (clock's ticking / stop tripping) — unless
+            # the tail is a stopword: "doin' it" may answer a WORD like
+            # poet, but stopword-tail phrases pooling together is noise
+            if not p.get("stoptail"):
+                by_par[(p["sid"], key)].append(p)
+                continue
+            # a stopword tail falls through: it may still answer a WORD
+            # (poet / know it) via the bucket-and-attach path below
         spans = grouped_spans[p["line"]]
         a_gi = next((gi for s, e, gi in spans if s <= p["start"] < e), None)
         b_gi = next((gi for s, e, gi in spans if s < p["end"] <= e), None)
