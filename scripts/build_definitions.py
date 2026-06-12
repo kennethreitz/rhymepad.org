@@ -1,30 +1,39 @@
-"""Distill the English Wiktionary extract (kaikki.org, CC BY-SA) into
-RhymePad's lexicon, restricted to the CMUdict vocabulary:
+"""Distill the English Wiktionary extract (kaikki.org, CC BY-SA) and the
+Moby Thesaurus II (public domain) into RhymePad's lexicon. Headwords are
+the CMUdict vocabulary, any non-rare word (zipf >= 2), and anything
+Wiktionary tags as slang however rare — a rhyme pad wants "guap" and
+"rizz" more than it wants frequency thresholds.
 
 data/definitions.json.gz — word -> {"d": [[pos, gloss], ...] (max 3),
     "n": uncapped sense count, "of": base} ("of" marks inflections, so
     "hums" can lead with "hum"'s senses without a lemmatizer).
 
 data/thesaurus.json.gz — word -> {"syn"/"opp"/"broad"/"rel": [words]}
-    from Wiktionary's curated links: synonyms, antonyms, hypernyms,
-    and the hyponym/coordinate/derived/related cluster.
+    from Wiktionary's curated links, symmetrized (if A lists B as a
+    synonym, B gets A too; hypernym/hyponym links invert likewise),
+    plus "mob": the Moby exhaustive-synonym layer, zipf-ranked.
 
 One-time, offline:
 
     curl -L -o build/kaikki-en.jsonl.gz \
         https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl.gz
+    curl -L -o build/mthesaur.txt \
+        https://www.gutenberg.org/files/3202/files/mthesaur.txt
     uv run python scripts/build_definitions.py
 """
 
 import gzip
 import json
 import re
+from functools import lru_cache
 from pathlib import Path
 
 import pronouncing
+from wordfreq import zipf_frequency
 
 ROOT = Path(__file__).parent.parent
 SRC = ROOT / "build" / "kaikki-en.jsonl.gz"
+SRC_MOBY = ROOT / "build" / "mthesaur.txt"
 OUT_DEFS = ROOT / "data" / "definitions.json.gz"
 OUT_THES = ROOT / "data" / "thesaurus.json.gz"
 
@@ -36,11 +45,15 @@ MAX_LEN = 140        # chars per gloss
 SKIP_TAGS = {"obsolete", "archaic", "dated", "misspelling", "rare",
              "no-gloss", "nonstandard", "pejorative", "offensive"}
 SKIP_POS = {"name", "proverb", "phrase", "punct", "character", "symbol"}
-# wiktextract link field -> thesaurus bucket, harvest cap per word
-LINK_BUCKETS = [("synonyms", "syn", 60), ("antonyms", "opp", 20),
-                ("hypernyms", "broad", 30), ("hyponyms", "rel", 60),
-                ("coordinate_terms", "rel", 60), ("related", "rel", 60),
-                ("derived", "rel", 60)]
+# wiktextract link field -> (bucket it lands in, bucket the reverse edge
+# lands in on the linked word) — synonymy/antonymy are symmetric, the
+# hypernym/hyponym pair inverts, the rest is mutual relatedness
+LINKS = [("synonyms", "syn", "syn"), ("antonyms", "opp", "opp"),
+         ("hypernyms", "broad", "rel"), ("hyponyms", "rel", "broad"),
+         ("coordinate_terms", "rel", "rel"), ("related", "rel", "rel"),
+         ("derived", "rel", "rel")]
+CAPS = {"syn": 120, "opp": 40, "broad": 60, "rel": 120, "mob": 150}
+MOBY_MIN_ZIPF = 2.0  # drop Moby's archaic dregs
 
 
 def cmu_words() -> set[str]:
@@ -58,20 +71,32 @@ def trim(gloss: str) -> str:
 
 def main():
     vocab = cmu_words()
+
+    @lru_cache(maxsize=None)
+    def headword(w: str) -> bool:
+        return (w in vocab or zipf_frequency(w, "en") >= 2.0) \
+            and WORD_OK.fullmatch(w) is not None
+
     defs: dict[str, dict] = {}   # word -> {"d": pairs, "n": count}
     bases: dict[str, str] = {}   # inflection -> base word
     thes: dict[str, dict] = {}   # word -> {bucket: [words]}
     n_lines = 0
 
-    def harvest_links(w, obj):
-        for field, bucket, cap in LINK_BUCKETS:
+    def put(w, bucket, t):
+        got = thes.setdefault(w, {}).setdefault(bucket, [])
+        if t not in got and len(got) < CAPS[bucket]:
+            got.append(t)
+
+    def harvest_links(w, obj, head):
+        for field, bucket, rev in LINKS:
             for item in obj.get(field, []):
                 t = item.get("word", "").strip()
                 if t == w or not LINK_OK.fullmatch(t):
                     continue
-                got = thes.setdefault(w, {}).setdefault(bucket, [])
-                if t not in got and len(got) < cap:
-                    got.append(t)
+                if head:
+                    put(w, bucket, t)
+                if headword(t):
+                    put(t, rev, w)
 
     with gzip.open(SRC, "rt", encoding="utf-8") as f:
         for line in f:
@@ -81,16 +106,21 @@ def main():
             e = json.loads(line)
             w = e.get("word", "")
             pos = e.get("pos", "")
-            if (w not in vocab or pos in SKIP_POS
-                    or not WORD_OK.fullmatch(w)):
+            if pos in SKIP_POS or not WORD_OK.fullmatch(w):
+                continue
+            head = headword(w) or any(
+                "slang" in (s.get("tags") or []) for s in e.get("senses", []))
+            harvest_links(w, e, head)
+            for s in e.get("senses", []):
+                if set(s.get("tags", [])) & SKIP_TAGS:
+                    continue
+                harvest_links(w, s, head)
+            if not head:
                 continue
             ent = defs.setdefault(w, {"d": [], "n": 0})
-            harvest_links(w, e)
             for s in e.get("senses", []):
-                tags = set(s.get("tags", []))
-                if tags & SKIP_TAGS:
+                if set(s.get("tags", [])) & SKIP_TAGS:
                     continue
-                harvest_links(w, s)
                 if s.get("form_of") or s.get("alt_of"):
                     src = (s.get("form_of") or s.get("alt_of"))[0]
                     base = src.get("word", "")
@@ -108,6 +138,21 @@ def main():
                         or any(g == gloss for _, g in pairs)):
                     continue
                 pairs.append([pos, gloss])
+
+    # the Moby layer: huge loose-synonym lists, symmetric, kept apart
+    # from the curated buckets so the runtime can rank them second
+    print("  …Moby Thesaurus")
+    for line in SRC_MOBY.read_text().splitlines():
+        root, *members = line.strip().split(",")
+        members = [m for m in members if LINK_OK.fullmatch(m)
+                   and zipf_frequency(m, "en") >= MOBY_MIN_ZIPF]
+        if headword(root):
+            for m in sorted(members,
+                            key=lambda m: -zipf_frequency(m, "en")):
+                put(root, "mob", m)
+        for m in members:
+            if headword(m):
+                put(m, "mob", root)
 
     # inflections carry a pointer to their base, ahead of any senses of
     # their own ("ran" is mostly "run", despite its own yarn-winch noun)

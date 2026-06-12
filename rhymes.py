@@ -1832,6 +1832,28 @@ def get_thesaurus() -> dict:
     return _thesaurus
 
 
+_describes: dict | None = None
+_associations: dict | None = None
+
+
+def get_describes() -> dict:
+    """noun -> adjectives that describe it, distilled offline from the
+    Tatoeba corpus by scripts/build_associations.py."""
+    global _describes
+    if _describes is None:
+        _describes = _load_lexicon("describes.json.gz")
+    return _describes
+
+
+def get_associations() -> dict:
+    """word -> what it summons (windowed co-occurrence PMI over the
+    Tatoeba corpus), same build."""
+    global _associations
+    if _associations is None:
+        _associations = _load_lexicon("associations.json.gz")
+    return _associations
+
+
 def lemma_base(w: str) -> str:
     """The base an inflection points at ("keys" -> "key"), else w."""
     return get_definitions().get(w, {}).get("of", w)
@@ -1852,32 +1874,38 @@ def definitions_for(w: str) -> dict:
             "defs": [{"pos": p, "gloss": g} for p, g in entry[:4]]}
 
 
-SYN_SECTIONS = [("syn", "synonyms", 30), ("opp", "opposites", 10),
-                ("broad", "broader", 12), ("rel", "related", 20)]
+SYN_SECTIONS = [("syn", "synonyms", 60), ("opp", "opposites", 15),
+                ("broad", "broader", 16), ("rel", "related", 30)]
 
 
 def synonyms_for(w: str, limit: int) -> list[dict]:
-    """Word associations from Wiktionary's curated links (same build as
-    the definitions), in sections: synonyms, opposites, broader terms,
-    and related words. Inflections fold in their base's links, so
-    'keys' and 'feeling' draw from 'key' and 'feel'."""
+    """Word associations from Wiktionary's curated links plus the Moby
+    exhaustive layer (same build as the definitions), in sections:
+    synonyms, opposites, broader terms, and related words. Inflections
+    fold in their base's links, so 'keys' draws from 'key'."""
     th = get_thesaurus()
     base = lemma_base(w)
     entries = [th.get(base, {})] + ([th.get(w, {})] if base != w else [])
 
-    # a word belongs to its strongest section only
-    taken = {w, base}
-    out = []
-    for key, label, cap in SYN_SECTIONS:
+    def gather(key, taken):
         names = []
         for ent in entries:
             names += [n for n in ent.get(key, [])
                       if n not in taken and n not in names]
         # wordfreq overrates phrases of common words ("high on life"),
         # so single words lead and phrases follow
-        ranked = sorted(names,
-                        key=lambda n: (" " in n, -zipf_frequency(n, "en"),
-                                       n))[:cap]
+        return sorted(names, key=lambda n: (" " in n,
+                                            -zipf_frequency(n, "en"), n))
+
+    # a word belongs to its strongest section only; within synonyms the
+    # curated Wiktionary links outrank Moby's looser bulk
+    taken = {w, base}
+    out = []
+    for key, label, cap in SYN_SECTIONS:
+        ranked = gather(key, taken)
+        if key == "syn":
+            ranked += [n for n in gather("mob", taken | set(ranked))]
+        ranked = ranked[:cap]
         taken.update(ranked)
         if ranked:
             out.append({"label": label,
@@ -2053,13 +2081,18 @@ def lookup_data(word: str, mode: str = "rhyme", limit: int = 60):
     w = word.strip().lower()[:64]
     limit = min(limit, 200)
     rhyme_on = None
-    if " " in w and mode != "syn":
+    if " " in w and mode not in ("syn", "desc", "trig"):
         rhyme_on = w.split()[-1]  # a phrase rhymes on its final word
         w = rhyme_on
     if mode == "syn":
         sections = synonyms_for(w, limit)
         return {"word": w, "mode": mode, "known": bool(sections),
                 "sections": sections}
+    if mode in ("desc", "trig"):
+        table = get_describes() if mode == "desc" else get_associations()
+        found = table.get(w) or table.get(lemma_base(w)) or []
+        return {"word": w, "mode": mode, "known": bool(found),
+                "words": [{"word": n} for n in found[:limit]]}
     phones = phones_for(w)
     if not phones:
         return {"word": w, "mode": mode, "known": False, "words": []}
@@ -2092,6 +2125,8 @@ def warm() -> None:
         pass  # model unavailable; spelling fallbacks still work
     get_definitions()
     get_thesaurus()
+    get_describes()
+    get_associations()
     get_slant_index()
     get_multi_indexes()
 

@@ -595,6 +595,36 @@ def test_definitions_unknown_word_is_quiet():
     assert rhymes.definitions_for("asdfgh") == {"word": "asdfgh", "defs": []}
 
 
+def test_definitions_cover_slang():
+    # headwords admit anything Wiktionary tags as slang, however rare
+    assert rhymes.definitions_for("yeet")["defs"]
+    assert rhymes.definitions_for("rizz")["defs"]
+
+
+def test_thesaurus_moby_layer_is_exhaustive():
+    data = lookup("money", mode="syn")
+    syn = next(s for s in data["sections"] if s["label"] == "synonyms")
+    flat = {w["word"] for w in syn["words"]}
+    assert len(flat) >= 40           # Moby bulk behind the curated links
+    assert "bread" in flat           # and the slang survives up front
+
+
+def test_lookup_describes_offline():
+    data = lookup("night", mode="desc")
+    flat = {w["word"] for w in data["words"]}
+    assert data["known"] and {"sleepless", "starry"} & flat
+
+
+def test_lookup_associations_offline():
+    data = lookup("heart", mode="trig")
+    flat = {w["word"] for w in data["words"]}
+    assert data["known"] and {"attack", "beating", "chest"} & flat
+
+
+def test_lookup_desc_unknown_word_is_quiet():
+    assert lookup("xqzzqx", mode="desc")["known"] is False
+
+
 def test_unanswered_endings_reported():
     res = analyze(Draft(text="the cat\nso blue\na hat\nthe end"))
     opens = {res["lines"][o["l"]][o["s"]:o["e"]] for o in res["open"]}

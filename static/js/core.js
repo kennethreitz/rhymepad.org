@@ -853,8 +853,8 @@ if(window.matchMedia('(pointer: coarse)').matches){
 /* ---------- insert at cursor ---------- */
 /* ============================================================
    WORD ENTRIES — one lookup renders the whole entry: phonetic
-   readout, describes, rhymes (+near), synonyms. Rhymes & sounds
-   come from our engine; describes comes from Datamuse.
+   readout, describes, rhymes (+near), synonyms. All of it comes
+   from our engine — no third-party calls.
 ============================================================ */
 const lookupInput = document.getElementById('lookupInput');
 const resultsBox = document.getElementById('lookupResults');
@@ -914,8 +914,8 @@ async function doLookup(){
     fetch(`/api/word?word=${encodeURIComponent(word)}`).then(r=>r.json()).catch(()=>null),
     fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=rhyme`).then(r=>r.json()).catch(()=>null),
     fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=syn`).then(r=>r.json()).catch(()=>null),
-    fetch(`https://api.datamuse.com/words?rel_jjb=${encodeURIComponent(word)}&max=40`).then(r=>r.json()).catch(()=>null),
-    fetch(`https://api.datamuse.com/words?rel_trg=${encodeURIComponent(word)}&max=30`).then(r=>r.json()).catch(()=>null),
+    fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=desc`).then(r=>r.json()).catch(()=>null),
+    fetch(`/api/lookup?word=${encodeURIComponent(word)}&mode=trig`).then(r=>r.json()).catch(()=>null),
   ]);
   if(seq !== lookupSeq) return;
   const el = defBox.querySelector('#defPhon');
@@ -989,11 +989,11 @@ function paintSections(){
         h += chipHtml(s.words.map(d=>d.word), s.label === 'synonyms' ? '' : 'near');
       });
     }
-    if(e.trig && e.trig.length){
-      h += `<div class="res-label">associations</div>` + chipHtml(e.trig.map(d=>d.word));
+    if(e.trig && e.trig.known && e.trig.words.length){
+      h += `<div class="res-label">associations</div>` + chipHtml(e.trig.words.map(d=>d.word));
     }
-    if(e.desc && e.desc.length){
-      h += `<div class="res-label">describes</div>` + chipHtml(e.desc.map(d=>d.word));
+    if(e.desc && e.desc.known && e.desc.words.length){
+      h += `<div class="res-label">describes</div>` + chipHtml(e.desc.words.map(d=>d.word));
     }
   }else{
     // the sound side: rhymes, near, multis
