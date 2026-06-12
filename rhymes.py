@@ -2139,12 +2139,12 @@ DRAFT_WORD = re.compile(r"[a-z'][a-z']+")
 
 
 def draft_context(text: str, top: int = 48) -> list[str]:
-    """The draft's content words — what the song is about. Distinct, in
-    order of appearance; filler and ultra-common words drop out on
-    frequency."""
+    """The draft's content words — what the song is about. Distinct,
+    nearest the end first: the scene being written now outranks the
+    intro. Filler and ultra-common words drop out on frequency."""
     out: list[str] = []
     seen = set()
-    for w in DRAFT_WORD.findall(text.lower()):
+    for w in reversed(DRAFT_WORD.findall(text.lower())):
         if w in seen or len(w) < 3:
             continue
         seen.add(w)
@@ -2158,35 +2158,47 @@ def draft_context(text: str, top: int = 48) -> list[str]:
 def suggest_data(word: str, text: str, limit: int = 60):
     """Rhyme lookup that knows the draft. Candidates connected to the
     draft's content words through the association/describes tables --
-    either direction -- carry a "fit" naming the connecting word, and
-    float first in their list: rhymes that fit the song, not just the
-    sound."""
+    either direction -- carry "fit" (the nearest connecting word) and
+    "fitn" (how many draft words they echo), and rank by echo count:
+    rhymes that fit the song, not just the sound. Multis come back as
+    dicts with syllables and fits, ghost-ready."""
     base = lookup_data(word, mode="rhyme", limit=limit)
     ctx = draft_context(text)
     if not base.get("known") or not ctx:
         return base
     tr, de = get_associations(), get_describes()
-    summoned: dict[str, str] = {}   # candidate -> draft word it echoes
+    summoned: dict[str, set[str]] = {}  # candidate -> draft words echoed
     for d in ctx:
         for n in (tr.get(d) or []) + (de.get(d) or []):
-            summoned.setdefault(n, d)
+            summoned.setdefault(n, set()).add(d)
     ctx_set = set(ctx)
+    ctx_rank = {d: i for i, d in enumerate(ctx)}  # 0 = nearest the end
 
-    def fit_of(cand: str) -> str | None:
-        via = summoned.get(cand)
-        if via is None:
-            hits = ctx_set.intersection(tr.get(cand) or [])
-            via = next(iter(hits), None)
-        if via is None or via[:4] == cand[:4]:  # skip self/kin echoes
-            return None
-        return via
+    def fit_of(cand: str) -> tuple[str | None, int]:
+        vias = set(summoned.get(cand, ()))
+        vias |= ctx_set.intersection(tr.get(cand) or [])
+        vias = {v for v in vias if v[:4] != cand[:4]}  # no self/kin echoes
+        if not vias:
+            return None, 0
+        return min(vias, key=lambda v: ctx_rank[v]), len(vias)
+
+    def annotate(d):
+        via, n = fit_of(d["word"].split()[-1])
+        if via:
+            d["fit"], d["fitn"] = via, n
+        return d
 
     for lst in (base["words"], base["near"]):
         for d in lst:
-            via = fit_of(d["word"])
-            if via:
-                d["fit"] = via
-        lst.sort(key=lambda d: "fit" not in d)  # stable: fits lead
+            annotate(d)
+        lst.sort(key=lambda d: -d.get("fitn", 0))  # stable: echoes lead
+    # multis match the target's whole vowel skeleton, so they share one
+    # syllable count — hand the ghost what it needs to fit the bar
+    vs = target_skeleton(base.get("rhyme_on") or base["word"])
+    msyl = len(vs) if vs else 0
+    base["multis"] = sorted(
+        (annotate({"word": m, "syl": msyl}) for m in base["multis"]),
+        key=lambda d: -d.get("fitn", 0))
     return base
 
 

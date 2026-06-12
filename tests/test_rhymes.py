@@ -640,6 +640,26 @@ def test_suggest_without_draft_is_plain_lookup():
     assert r["known"] and not any("fit" in d for d in r["words"])
 
 
+def test_suggest_grades_by_echo_count():
+    draft = ("the moon hung low above the harbor\nsmoke curled off the water\n"
+             "i lit a match to see her face\nand lost it in the fire")
+    r = rhymes.suggest_data("higher", draft)
+    fitns = [d.get("fitn", 0) for d in r["words"]]
+    assert fitns == sorted(fitns, reverse=True)  # more echoes lead
+    assert fitns[0] >= 2
+
+
+def test_suggest_context_reads_newest_first():
+    ctx = rhymes.draft_context("dawn breaks early\nthe ember glows at midnight")
+    assert ctx.index("midnight") < ctx.index("dawn")
+
+
+def test_suggest_multis_are_ghost_ready():
+    r = rhymes.suggest_data("paper", "a draft about nothing much")
+    assert r["multis"] and all(
+        d["word"] and d["syl"] >= 1 for d in r["multis"])
+
+
 def test_meaning_chips_chime_when_they_rhyme():
     # a synonym that also rhymes is the jackpot — it floats first, gold
     data = lookup("light", mode="syn")

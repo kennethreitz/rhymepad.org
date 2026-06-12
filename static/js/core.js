@@ -694,22 +694,20 @@ async function computeGhost(){
   // only at the very end of a line that's really being written
   if(col !== line.length || !line.trim() || /^\s*[#\[]/.test(line)) return clear();
   if(ghostDismissed === ln + '|' + line) return clear();
-  // the target: the previous lyric line's ending, within this stanza
-  let target = null;
+  // the target: the nearest UNANSWERED ending in this stanza — answer
+  // the scheme, not blindly the previous line (in ABAB, land the B).
+  // Fallback when nothing's open: the previous lyric line's ending.
+  const openLines = new Set();
+  if(analysis) (analysis.open || []).forEach(o=>{
+    if(analysis.lines[o.l] === lines[o.l]) openLines.add(o.l);
+  });
+  let target = null, tline = -1;
   for(let j = ln - 1; j >= 0; j--){
     const prev = lines[j];
     if(!prev.trim()) break;                 // stanza boundary
     if(/^\s*[#\[]/.test(prev)) continue;  // annotations don't end lines
-    target = lastWordOf(prev);
-    break;
-  }
-  if(!target) return clear();
-  let tline = -1;
-  for(let j = ln - 1; j >= 0; j--){
-    const prev = lines[j];
-    if(!prev.trim()) break;
-    if(/^\s*[#\[]/.test(prev)) continue;
-    tline = j; break;
+    if(tline < 0){ tline = j; target = lastWordOf(prev); }  // fallback
+    if(openLines.has(j)){ tline = j; target = lastWordOf(prev); break; }
   }
   if(!(target in ghostCache)){
     ghostCache[target] = null;  // in flight
@@ -719,10 +717,11 @@ async function computeGhost(){
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({word: target, text: editor.value})});
       const d = await r.json();
-      const shape = (w, near)=>({word: w.word.toLowerCase(), syl: w.syl || 1,
-                                 z: w.z || 0, fit: w.fit || null, near});
-      ghostCache[target] = (d.words || []).map(w=>shape(w, false))
-        .concat((d.near || []).map(w=>shape(w, true)));
+      const shape = (w, near, multi)=>({word: w.word.toLowerCase(), syl: w.syl || 1,
+        z: w.z || 0, fit: w.fit || null, fitn: w.fitn || 0, near, multi});
+      ghostCache[target] = (d.words || []).map(w=>shape(w, false, false))
+        .concat(((d.multis || []).filter(w=>w.word)).map(w=>shape(w, false, true)))
+        .concat((d.near || []).map(w=>shape(w, true, false)));
     }catch(e){ delete ghostCache[target]; return; }
     // the caret may have moved while we fetched
     return computeGhost();
@@ -733,16 +732,16 @@ async function computeGhost(){
   if(cur && (cur === target || cands.some(c=>c.word === cur))) return clear();  // already lands
   // skip words already spent as line endings in this draft
   const spent = new Set(lines.map(l=>lastWordOf(l)).filter(Boolean));
-  let avail = cands.filter(c=>!spent.has(c.word) && c.word !== cur);
+  let avail = cands.filter(c=>!spent.has(c.word.split(' ').pop()) && c.word !== cur);
   if(!avail.length) return clear();
-  // rank: words that echo the song lead, the bar breaks ties (when the
-  // meter is fresh for both lines), slant rhymes back-fill last
+  // rank: the more draft words a candidate echoes the higher it leads,
+  // the bar breaks ties (when the meter is fresh), slant back-fills
   const fresh = i => analysis && analysis.lines[i] === lines[i] && analysis.meter && analysis.meter[i];
   let gap = 0;
   if(tline >= 0 && fresh(tline) && fresh(ln))
     gap = analysis.meter[tline].syl - analysis.meter[ln].syl;
   avail = avail.map((c, i)=>({c, i,
-      f: c.fit ? 0 : 1,
+      f: -(c.fitn || 0),
       m: gap >= 1 ? Math.abs(c.syl - gap) : 0,
       n: c.near ? 1 : 0}))
     .sort((a, b)=>a.f - b.f || a.m - b.m || a.n - b.n || a.i - b.i)
