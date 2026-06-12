@@ -654,6 +654,15 @@ def test_suggest_context_reads_newest_first():
     assert ctx.index("midnight") < ctx.index("dawn")
 
 
+def test_continuations_read_like_language():
+    # "you will _find_" — the bigram table knows what comes next
+    nx = rhymes.get_continuations()
+    assert "find" in nx["will"]
+    assert "life" in nx["my"]
+    from app import follows
+    assert follows(prev="WILL ")["words"] == nx["will"]
+
+
 def test_suggest_multis_are_ghost_ready():
     r = rhymes.suggest_data("paper", "a draft about nothing much")
     assert r["multis"] and all(
