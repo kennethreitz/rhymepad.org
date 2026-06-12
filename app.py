@@ -20,6 +20,7 @@ from urllib.parse import quote
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from wordfreq import zipf_frequency
 
 import rhymes
 from rhymes import (lookup_data, multis_for,  # noqa: F401  (test surface)
@@ -59,6 +60,14 @@ def word_info(word: str):
     return rhymes.word_data(word)
 
 
+@app.get("/api/zipf")
+def word_zipf(word: str):
+    """Frequency only — no phonetics, no g2p. The ghost's mid-word gate
+    needs an instant answer, not a 400ms neural pronunciation."""
+    w = word.strip().lower()[:64]
+    return {"word": w, "zipf": round(zipf_frequency(w, "en"), 2)}
+
+
 @app.get("/api/lookup")
 def lookup(word: str, mode: str = "rhyme", limit: int = 60):
     return rhymes.lookup_data(word, mode=mode, limit=limit)
@@ -74,6 +83,14 @@ def suggest(req: SuggestReq):
     """Rhymes for a word, draft-aware: candidates that echo what the
     draft is about lead the list."""
     return rhymes.suggest_data(req.word, req.text[:rhymes.MAX_DRAFT])
+
+
+@app.get("/api/follows")
+def follows(prev: str):
+    """Words that commonly come right after `prev` — phrase fuel for
+    the ghost's ranking."""
+    w = prev.strip().lower()[:64]
+    return {"prev": w, "words": rhymes.get_continuations().get(w, [])}
 
 OG_PALETTE = ["#e8814a", "#4ea3e8", "#6fd08c", "#d46fb8",
               "#e8c54a", "#9b7ce8", "#e85a5a", "#46cabf",

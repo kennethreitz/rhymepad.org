@@ -10,6 +10,10 @@ data/describes.json.gz — noun -> [adjectives], from adjective-noun
 data/associations.json.gz — word -> [trigger words], from windowed
     co-occurrence PMI: what a word summons, not what it means.
 
+data/continuations.json.gz — word -> [words that commonly come next],
+    raw bigram counts: the ghost ranks candidates that read like
+    language after what's already on the line ("you will _find_").
+
 Adjective/noun identity comes from Wiktionary POS data (same extract as
 the definitions build), not a tagger.
 
@@ -43,6 +47,10 @@ SRC_POEM = ROOT / "build" / "gutenberg-poetry.ndjson.gz"
 SRC_SUBS = ROOT / "build" / "opensubs-en.txt.gz"
 OUT_DESC = ROOT / "data" / "describes.json.gz"
 OUT_TRIG = ROOT / "data" / "associations.json.gz"
+OUT_NEXT = ROOT / "data" / "continuations.json.gz"
+NEXT_TOP = 40       # continuations kept per word
+NEXT_MIN = 5        # bigram count floor
+NEXT_PREV_MIN = 50  # a word this rare can't anchor a phrase table
 
 WORD_OK = re.compile(r"[a-z][a-z']*")
 TOKEN = re.compile(r"[A-Za-z']+")
@@ -148,7 +156,9 @@ def main():
     adj_tot: Counter = Counter()
     noun_tot: Counter = Counter()
     pair: dict[str, Counter] = defaultdict(Counter)   # word -> co counts
+    nxt: dict[str, Counter] = defaultdict(Counter)    # word -> next-word counts
     uni: Counter = Counter()
+    prev_tot: Counter = Counter()
     n_sent = 0
 
     zf = lru_cache(maxsize=None)(lambda t: zipf_frequency(t, "en"))
@@ -171,11 +181,18 @@ def main():
         if n_sent % PRUNE_EVERY == 0:
             prune(pair, "assoc")
             prune(desc, "desc")
+            prune(nxt, "next")
         toks = tokens_of(sent)
         content = [t for t in toks if t not in STOP and len(t) > 1
                    and "'" not in t and zf(t) >= 2.0]
         for t in set(content):
             uni[t] += 1
+        # continuations: raw adjacent bigrams, function words included —
+        # "will find" is exactly the kind of pair this table is for
+        for a, b in zip(toks, toks[1:]):
+            if zf(a) >= 2.0 and zf(b) >= 2.0:
+                nxt[a][b] += 1
+                prev_tot[a] += 1
         # describes: "vast ocean" and "the ocean is vast"
         for i, t in enumerate(toks):
             if t in adj and i + 1 < len(toks) and toks[i + 1] in noun \
@@ -234,8 +251,17 @@ def main():
         if scored:
             out_trig[t] = [u for _, u in scored[:TOP]]
 
+    out_next = {}
+    for a, c in nxt.items():
+        if prev_tot[a] < NEXT_PREV_MIN:
+            continue
+        keep = [b for b, k in c.most_common(NEXT_TOP) if k >= NEXT_MIN]
+        if keep:
+            out_next[a] = keep
+
     OUT_DESC.parent.mkdir(exist_ok=True)
-    for path, obj in ((OUT_DESC, out_desc), (OUT_TRIG, out_trig)):
+    for path, obj in ((OUT_DESC, out_desc), (OUT_TRIG, out_trig),
+                      (OUT_NEXT, out_next)):
         blob = json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
         with gzip.open(path, "wt", encoding="utf-8", compresslevel=9) as f:
             f.write(blob)

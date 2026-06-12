@@ -1854,6 +1854,19 @@ def get_associations() -> dict:
     return _associations
 
 
+_continuations: dict | None = None
+
+
+def get_continuations() -> dict:
+    """word -> words that commonly come right after it (corpus bigrams,
+    same build) — lets the ghost rank candidates that read like
+    language after what's already on the line."""
+    global _continuations
+    if _continuations is None:
+        _continuations = _load_lexicon("continuations.json.gz")
+    return _continuations
+
+
 def lemma_base(w: str) -> str:
     """The base an inflection points at ("keys" -> "key"), else w."""
     return get_definitions().get(w, {}).get("of", w)
@@ -2218,6 +2231,7 @@ def warm() -> None:
     get_thesaurus()
     get_describes()
     get_associations()
+    get_continuations()
     get_slant_index()
     get_multi_indexes()
 

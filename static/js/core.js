@@ -689,19 +689,10 @@ function lastWordOf(s){
   return m ? m[0].toLowerCase() : null;
 }
 
-async function computeGhost(){
-  const clear = ()=>{ if(ghost){ ghost = null; closeGhostMenu(); render(); } };
-  if(!suggestToggle.checked || !rhymeToggle.checked || editor.readOnly) return clear();
-  if(editor.selectionStart !== editor.selectionEnd) return clear();
-  const lines = editor.value.split('\n');
-  const {ln, col} = caretLineCol();
-  const line = lines[ln] || '';
-  // only at the very end of a line that's really being written
-  if(col !== line.length || !line.trim() || /^\s*[#\[]/.test(line)) return clear();
-  if(ghostDismissed === ln + '|' + line) return clear();
-  // the target: the nearest UNANSWERED ending in this stanza — answer
-  // the scheme, not blindly the previous line (in ABAB, land the B).
-  // Fallback when nothing's open: the previous lyric line's ending.
+// the target: the nearest UNANSWERED ending in this stanza — answer
+// the scheme, not blindly the previous line (in ABAB, land the B).
+// Fallback when nothing's open: the previous lyric line's ending.
+function ghostTarget(lines, ln){
   const openLines = new Set();
   if(analysis) (analysis.open || []).forEach(o=>{
     if(analysis.lines[o.l] === lines[o.l]) openLines.add(o.l);
@@ -714,25 +705,66 @@ async function computeGhost(){
     if(tline < 0){ tline = j; target = lastWordOf(prev); }  // fallback
     if(openLines.has(j)){ tline = j; target = lastWordOf(prev); break; }
   }
+  return {target, tline};
+}
+
+async function loadGhostCands(target){
+  if(target in ghostCache) return;
+  ghostCache[target] = null;  // in flight
+  try{
+    // draft-aware: candidates that echo the song carry a fit
+    const r = await fetch('/api/suggest', {method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({word: target, text: editor.value})});
+    const d = await r.json();
+    const shape = (w, near, multi)=>({word: w.word.toLowerCase(), syl: w.syl || 1,
+      z: w.z || 0, fit: w.fit || null, fitn: w.fitn || 0, near, multi});
+    ghostCache[target] = (d.words || []).map(w=>shape(w, false, false))
+      .concat(((d.multis || []).filter(w=>w.word)).map(w=>shape(w, false, true)))
+      .concat((d.near || []).map(w=>shape(w, true, false)));
+  }catch(e){ delete ghostCache[target]; }
+}
+
+// follows-cache: prev word -> words that commonly come next, for
+// ranking candidates that read like language ("you will _find_")
+const followsCache = {};
+async function loadFollows(prev){
+  if(prev in followsCache) return;
+  followsCache[prev] = null;  // in flight
+  try{
+    const d = await (await fetch(`/api/follows?prev=${encodeURIComponent(prev)}`)).json();
+    followsCache[prev] = new Set(d.words || []);
+  }catch(e){ delete followsCache[prev]; }
+}
+
+// short fragments that are real words — appends allowed without asking
+const SHORT_OK = new Set(('a i ah an am as be by do go ha he hi if in is it ma me ' +
+  'my no of oh on or so to uh up us we ya yo').split(' '));
+
+async function computeGhost(){
+  const clear = ()=>{ if(ghost){ ghost = null; closeGhostMenu(); render(); } };
+  if(!suggestToggle.checked || !rhymeToggle.checked || editor.readOnly) return clear();
+  if(editor.selectionStart !== editor.selectionEnd) return clear();
+  const lines = editor.value.split('\n');
+  const {ln, col} = caretLineCol();
+  const line = lines[ln] || '';
+  if(col !== line.length || /^\s*[#\[]/.test(line)) return clear();
+  if(!line.trim()){
+    // a fresh line: warm the cache now so the pause costs nothing
+    const t = ghostTarget(lines, ln);
+    if(t.target) loadGhostCands(t.target);
+    return clear();
+  }
+  if(ghostDismissed === ln + '|' + line) return clear();
+  const {target, tline} = ghostTarget(lines, ln);
+  if(!target) return clear();
   if(!(target in ghostCache)){
-    ghostCache[target] = null;  // in flight
-    try{
-      // draft-aware: candidates that echo the song carry a fit
-      const r = await fetch('/api/suggest', {method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({word: target, text: editor.value})});
-      const d = await r.json();
-      const shape = (w, near, multi)=>({word: w.word.toLowerCase(), syl: w.syl || 1,
-        z: w.z || 0, fit: w.fit || null, fitn: w.fitn || 0, near, multi});
-      ghostCache[target] = (d.words || []).map(w=>shape(w, false, false))
-        .concat(((d.multis || []).filter(w=>w.word)).map(w=>shape(w, false, true)))
-        .concat((d.near || []).map(w=>shape(w, true, false)));
-    }catch(e){ delete ghostCache[target]; return; }
-    // the caret may have moved while we fetched
-    return computeGhost();
+    await loadGhostCands(target);
+    return computeGhost();  // the caret may have moved while we fetched
   }
   const cands = ghostCache[target];
-  if(!cands || !cands.length) return clear();
+  if(cands === null) return;  // in flight elsewhere — hold, don't flicker
+  if(!cands.length) return clear();
   const cur = lastWordOf(line);
   if(cur && (cur === target || cands.some(c=>c.word === cur))) return clear();  // already lands
   // a trailing fragment turns matching candidates into COMPLETIONS:
@@ -747,15 +779,28 @@ async function computeGhost(){
   // a fragment nothing completes: only append after it if it's a real
   // word — never bolt a suggestion onto half of one ("brai throw")
   if(partial && !avail.some(c=>c.comp)){
-    if(!(partial in knownWord)){
-      try{
-        const d = await (await fetch(`/api/word?word=${encodeURIComponent(partial)}`)).json();
-        knownWord[partial] = !!d.known && (d.zipf || 0) >= 2.3;
-      }catch(e){ return; }
-      return computeGhost();  // the caret may have moved while we fetched
+    if(partial.length <= 2){
+      if(!SHORT_OK.has(partial)) return clear();
+    }else{
+      if(!(partial in knownWord)){
+        try{
+          const d = await (await fetch(`/api/zipf?word=${encodeURIComponent(partial)}`)).json();
+          knownWord[partial] = (d.zipf || 0) >= 2.3;
+        }catch(e){ return; }
+        return computeGhost();  // the caret may have moved while we fetched
+      }
+      if(knownWord[partial] === null) return;  // in flight — hold
+      if(!knownWord[partial]) return clear();
     }
-    if(!knownWord[partial]) return clear();
   }
+  // what word comes right before the slot? phrase-rank against it
+  const ws = line.match(/[A-Za-z']+/g) || [];
+  const prevWord = (partial ? ws[ws.length - 2] : ws[ws.length - 1] || '')?.toLowerCase() || null;
+  if(prevWord && !(prevWord in followsCache)){
+    await loadFollows(prevWord);
+    return computeGhost();
+  }
+  const follows = (prevWord && followsCache[prevWord]) || new Set();
   // rank: completions of what's being typed lead, then the more draft
   // words a candidate echoes the higher it sits, the bar breaks ties
   // (when the meter is fresh), slant back-fills
@@ -767,10 +812,11 @@ async function computeGhost(){
   const pv = partial ? (partial.match(/[aeiouy]+/g) || []).length : 0;
   avail = avail.map((c, i)=>({c, i,
       p: c.comp ? 0 : 1,
+      ph: follows.has(c.word.split(' ')[0]) ? 0 : 1,  // reads like a phrase
       f: -(c.fitn || 0),
       m: gap >= 1 ? Math.abs((c.comp ? c.syl - pv : c.syl) - gap) : 0,
       n: c.near ? 1 : 0}))
-    .sort((a, b)=>a.p - b.p || a.f - b.f || a.m - b.m || a.n - b.n || a.i - b.i)
+    .sort((a, b)=>a.p - b.p || a.ph - b.ph || a.f - b.f || a.m - b.m || a.n - b.n || a.i - b.i)
     .map(x=>x.c);
   avail = avail.slice(0, 8);
   const sig = avail.map(c=>c.word + (c.comp ? '+' : '')).join();
@@ -831,7 +877,7 @@ function positionGhostMenu(){
   ghostMenu.style.left = Math.max(8, left) + 'px';
   ghostMenu.style.top = Math.max(8, top) + 'px';
 }
-const ghostSoon = debounce(computeGhost, 300);
+const ghostSoon = debounce(computeGhost, 150);
 
 editor.addEventListener('keydown', e=>{
   if(ghostMenu && ghost){
