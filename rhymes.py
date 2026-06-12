@@ -1629,10 +1629,23 @@ def analyze_text(text: str) -> dict:
         toks = sorted(onset_map[key], key=lambda t: (t["line"], t["start"]))
         cluster: list = []
 
+        def _syls(c):
+            ph = phones_for(c["word"])
+            return sum(p[-1].isdigit() for p in ph.split()) if ph else 0
+
         def flush(cluster):
             nonlocal allit_gid
             distinct = {c["word"].lower() for c in cluster}
-            if len(cluster) >= 3 and len(distinct) >= 2:
+            ok = len(cluster) >= 3 and len(distinct) >= 2
+            if not ok and len(cluster) == 2 and len(distinct) == 2:
+                a, b = cluster
+                # a tight PAIR of substantial words alliterates on its
+                # own: "sordid solutions" — same line, side by side,
+                # both two+ syllables (so "big boy" stays quiet)
+                ok = (a["line"] == b["line"]
+                      and b["start"] - a["end"] <= 2
+                      and _syls(a) >= 2 and _syls(b) >= 2)
+            if ok:
                 for c in cluster:
                     allit_out.append({"l": c["line"], "s": c["start"],
                                       "e": c["end"], "g": allit_gid})

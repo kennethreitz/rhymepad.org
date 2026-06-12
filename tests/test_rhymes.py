@@ -893,3 +893,13 @@ def test_ings_does_not_glue_to_ence():
             "all this is, is nonsense")
     fam = group_with(text, "confidence", "nonsense")
     assert "offerings" not in fam
+
+
+def test_alliteration_tight_pair():
+    res = analyze(Draft(text="sordid solutions on my mind"))
+    al = {res["lines"][a["l"]][a["s"]:a["e"]].lower() for a in res["allit"]}
+    assert {"sordid", "solutions"} <= al
+    # but two small words side by side stay quiet
+    res2 = analyze(Draft(text="big boy moves on my mind"))
+    al2 = {res2["lines"][a["l"]][a["s"]:a["e"]].lower() for a in res2["allit"]}
+    assert "big" not in al2
