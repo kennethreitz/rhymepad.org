@@ -351,6 +351,38 @@
     background: color-mix(in srgb, var(--accent) 22%, transparent);
     color: var(--accent);
   }
+  #legend {
+    position: fixed; z-index: 50; width: 340px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 12px; padding: 14px 16px;
+    box-shadow: 0 14px 40px rgba(0,0,0,.55);
+    font-size: 12px; line-height: 1.55; color: var(--ink-dim);
+    pointer-events: none;
+  }
+  #legend h4 {
+    margin: 0 0 6px; font-size: 12px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink);
+  }
+  #legend p { margin: 6px 0; }
+  #legend .lg-pal { display: flex; gap: 3px; margin: 8px 0; }
+  #legend .lg-pal span { width: 14px; height: 8px; border-radius: 3px; }
+  #legend .lg-demo {
+    font-family: 'Spline Sans Mono', monospace; font-size: 13px;
+    margin: 8px 0; color: var(--ink);
+  }
+  #legend .lg-demo .chip { padding: 1px 4px; border-radius: 4px; }
+  #legend .lg-key {
+    display: grid; grid-template-columns: auto 1fr; gap: 7px 10px;
+    align-items: center; margin: 10px 0;
+    font-family: 'Spline Sans Mono', monospace; font-size: 13px;
+    color: var(--ink);
+  }
+  #legend .lg-key i { font-style: normal; font-family: 'Spline Sans Mono', monospace; font-size: 11px; color: var(--ink-dim); }
+  #legend .lg-key .chip { padding: 1px 5px; border-radius: 4px; justify-self: start; }
+  #legend kbd {
+    font-family: inherit; font-size: 10px; padding: 0 4px;
+    border: 1px solid var(--line); border-radius: 4px;
+  }
   .btn, .tab { touch-action: manipulation; }
   @media (max-width: 900px){
     .wrap {
@@ -406,11 +438,11 @@ Double-click any word to look it up on the right."></textarea>
       <button class="btn" id="shareBtn" title="Share via the system sheet — Notes, Messages, anywhere" hidden>Share</button>
       <button class="btn" id="linkBtn" title="Copy a link that carries this whole draft — no account, no upload">Copy link</button>
       <span class="sep"></span>
-      <label class="mtoggle" title="Color-code rhyme families"><input type="checkbox" id="rhymeToggle" checked> rhyme</label>
-      <label class="mtoggle" title="Underline words that share an initial sound"><input type="checkbox" id="allitToggle"> alliteration</label>
-      <label class="mtoggle" title="Sheet music for your flow — syllable emphasis dots under each word"><input type="checkbox" id="stressToggle"> rhythm</label>
-      <label class="mtoggle" title="A quiet rhyme suggestion at the end of the line you're writing — press Tab to take it"><input type="checkbox" id="suggestToggle" checked> suggest</label>
-      <label class="mtoggle touch-only" title="Tap any word to light up its rhyme family — the keyboard stays out of the way"><input type="checkbox" id="exploreToggle"> explore</label>
+      <label class="mtoggle"><input type="checkbox" id="rhymeToggle" checked> rhyme</label>
+      <label class="mtoggle"><input type="checkbox" id="allitToggle"> alliteration</label>
+      <label class="mtoggle"><input type="checkbox" id="stressToggle"> rhythm</label>
+      <label class="mtoggle"><input type="checkbox" id="suggestToggle" checked> suggest</label>
+      <label class="mtoggle touch-only"><input type="checkbox" id="exploreToggle"> explore</label>
       <div class="scheme-readout" id="schemeReadout"></div>
     </div>
   </div>
@@ -986,6 +1018,94 @@ editor.addEventListener('input', ()=>{
 });
 editor.addEventListener('scroll', ()=>{ highlight.scrollTop = stresslayer.scrollTop = editor.scrollTop; highlight.scrollLeft = stresslayer.scrollLeft = editor.scrollLeft; renderGutter(); });
 const editorShell = document.querySelector('.editor-shell');
+
+/* ---- toggle legends: hover a pill, learn the layer ------------------ */
+const LEGENDS = {
+  rhymeToggle: `
+    <h4>Rhyme</h4>
+    <p><b style="color:var(--ink)">Same color = same sound.</b> Detection is
+    phonetic, not spelling — yes, <i>orange</i> rhymes with <i>door hinge</i>.
+    16 hues, assigned so neighboring families never share:</p>
+    <div class="lg-pal">${Array.from({length:16},(_,i)=>`<span style="background:var(--r${i})"></span>`).join('')}</div>
+    <p><b style="color:var(--ink)">Brightness = strength.</b> Perfect rhymes
+    blaze, slant rhymes sit back; within a family the anchors out-glow the
+    loose attachments.</p>
+    <div class="lg-key">
+      <span class="chip" style="background:color-mix(in srgb,var(--r1) 34%,transparent);color:color-mix(in srgb,var(--r1) 55%,var(--ink));box-shadow:inset 0 -1.5px 0 0 color-mix(in srgb,var(--r1) 42%,transparent)">tonight</span>
+      <i>perfect rhyme — the underline marks the exact rhyming part</i>
+      <span class="chip" style="background:color-mix(in srgb,var(--r1) 14%,transparent);color:color-mix(in srgb,var(--r1) 32%,var(--ink))">mine</span>
+      <i>slant rhyme — fainter fill, weaker grip</i>
+      <span class="chip" style="background:color-mix(in srgb,var(--ink) 13%,transparent)">cold</span>
+      <i>unanswered — an ending no line replies to yet</i>
+      <span class="chip" style="text-decoration:underline dotted color-mix(in srgb,var(--accent-2) 70%,transparent);text-underline-offset:3px">bond</span>
+      <i>near-miss — one sound from rhyming; a small edit locks it</i>
+    </div>
+    <p><b style="color:var(--ink)">Hover any word</b> to light its whole
+    family. The philosophy throughout: color only what a listener would
+    actually hear.</p>`,
+  allitToggle: `
+    <h4>Alliteration</h4>
+    <p>Words sharing a <b style="color:var(--ink)">head sound</b> get an
+    underline — fills belong to rhyme (tail sounds), underlines to
+    alliteration (front sounds), so the two never collide.</p>
+    <div class="lg-demo">
+      <span style="box-shadow:inset 0 -2px 0 0 var(--r2)">sipping</span>
+      <span style="box-shadow:inset 0 -2px 0 0 var(--r2)">cider</span>
+      <span style="box-shadow:inset 0 -2px 0 0 var(--r2)">slow</span>
+    </div>
+    <p>Runs need three or more shared onsets to light up.</p>`,
+  stressToggle: `
+    <h4>Rhythm</h4>
+    <p>Sheet music for your flow: a dot under every syllable —
+    <b style="color:var(--ink)">● stressed, ○ unstressed</b>.</p>
+    <div class="lg-demo">placement of creation<br>
+    <span style="font-size:9px;letter-spacing:4px">●○&nbsp;&nbsp;○&nbsp;&nbsp;○●○</span></div>
+    <p>Lines whose stress patterns echo each other share a dot color —
+    a cadence family. Scan the dots to see where your bars match.</p>`,
+  suggestToggle: `
+    <h4>Suggest</h4>
+    <p>Pause at the end of the line you're writing and a quiet ghost
+    offers a landing word that rhymes with the previous line's ending.</p>
+    <p><kbd>Tab</kbd> opens the candidates — syllable dots show which
+    fits the bar — <kbd>Enter</kbd> lands it, <kbd>Esc</kbd> waves it
+    off. It never types for you; it only offers.</p>`,
+  exploreToggle: `
+    <h4>Explore</h4>
+    <p>Hover, for fingers: the pad goes read-only so a tap lights up the
+    rhyme family under it — and the keyboard stays out of the way.</p>`,
+};
+const legendEl = document.createElement('div');
+legendEl.id = 'legend';
+legendEl.hidden = true;
+document.body.appendChild(legendEl);
+let legendTimer = 0;
+if(window.matchMedia('(hover: hover)').matches){
+  document.querySelectorAll('.mtoggle').forEach(lab=>{
+    const input = lab.querySelector('input');
+    const html = input && LEGENDS[input.id];
+    if(!html) return;
+    lab.addEventListener('mouseenter', ()=>{
+      legendTimer = setTimeout(()=>{
+        legendEl.innerHTML = html;
+        legendEl.hidden = false;
+        legendEl.style.visibility = 'hidden';
+        const r = lab.getBoundingClientRect();
+        const w = legendEl.offsetWidth, hh = legendEl.offsetHeight;
+        let x = Math.min(Math.max(8, r.left + r.width / 2 - w / 2),
+                         innerWidth - w - 8);
+        let y = r.top - hh - 10;
+        if(y < 8) y = r.bottom + 10;
+        legendEl.style.left = x + 'px';
+        legendEl.style.top = y + 'px';
+        legendEl.style.visibility = '';
+      }, 350);
+    });
+    lab.addEventListener('mouseleave', ()=>{
+      clearTimeout(legendTimer);
+      legendEl.hidden = true;
+    });
+  });
+}
 function setEmphasis(g){
   if(!rhymeToggle.checked) g = null;  // no rhyme layer, no focus
   if(g === activeFam) return;
