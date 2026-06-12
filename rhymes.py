@@ -1797,25 +1797,44 @@ def get_slant_index() -> dict[str, set[str]]:
     return _slant_index
 
 
+def _load_lexicon(name: str) -> dict:
+    import gzip
+    import json
+    from pathlib import Path
+    path = Path(__file__).parent / "data" / name
+    try:
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            return json.load(f)
+    except OSError:
+        return {}
+
+
 _definitions: dict | None = None
+_thesaurus: dict | None = None
 
 
 def get_definitions() -> dict:
-    """Wiktionary glosses from data/definitions.json.gz — built offline by
-    scripts/build_definitions.py. No WordNet, no network: word -> list of
-    [pos, gloss] pairs, or [["of", base]] for pure inflections."""
+    """Wiktionary glosses from data/definitions.json.gz — built offline
+    by scripts/build_definitions.py. No WordNet, no network: word ->
+    {"d": [[pos, gloss], ...], "n": sense count, "of": base word}."""
     global _definitions
     if _definitions is None:
-        import gzip
-        import json
-        from pathlib import Path
-        path = Path(__file__).parent / "data" / "definitions.json.gz"
-        try:
-            with gzip.open(path, "rt", encoding="utf-8") as f:
-                _definitions = json.load(f)
-        except OSError:
-            _definitions = {}
+        _definitions = _load_lexicon("definitions.json.gz")
     return _definitions
+
+
+def get_thesaurus() -> dict:
+    """Wiktionary's curated word links, same build: word ->
+    {"syn"/"opp"/"broad"/"rel": [words]}."""
+    global _thesaurus
+    if _thesaurus is None:
+        _thesaurus = _load_lexicon("thesaurus.json.gz")
+    return _thesaurus
+
+
+def lemma_base(w: str) -> str:
+    """The base an inflection points at ("keys" -> "key"), else w."""
+    return get_definitions().get(w, {}).get("of", w)
 
 
 def definitions_for(w: str) -> dict:
@@ -1823,93 +1842,46 @@ def definitions_for(w: str) -> dict:
     ("ran" is mostly "run"), then any senses of their own. Returns the
     headword the leading glosses belong to and the [pos, gloss] pairs."""
     defs = get_definitions()
-    entry, base = defs.get(w, []), w
-    if entry and entry[0][0] == "of":
-        base = entry[0][1]
-        entry = defs.get(base, []) + entry[1:]
+    base = lemma_base(w)
+    entry = defs.get(base, {}).get("d", [])
+    if base != w:
+        entry = entry + defs.get(w, {}).get("d", [])
     if not entry:
         return {"word": w, "defs": []}
     return {"word": base,
             "defs": [{"pos": p, "gloss": g} for p, g in entry[:4]]}
 
 
-_wordnet = None
-
-
-def get_wordnet():
-    """WordNet via NLTK (already a g2p-en dependency), data on demand."""
-    global _wordnet
-    if _wordnet is None:
-        from nltk.corpus import wordnet as wn
-        try:
-            wn.synsets("test")
-        except LookupError:
-            import nltk
-            nltk.download("wordnet", quiet=True)
-            nltk.download("omw-1.4", quiet=True)
-        _wordnet = wn
-    return _wordnet
-
-
-POS_NAMES = {"n": "noun", "v": "verb", "a": "adjective",
-             "s": "adjective", "r": "adverb"}
+SYN_SECTIONS = [("syn", "synonyms", 30), ("opp", "opposites", 10),
+                ("broad", "broader", 12), ("rel", "related", 20)]
 
 
 def synonyms_for(w: str, limit: int) -> list[dict]:
-    """Word associations from WordNet, in sections: synonyms, opposites,
-    broader terms, and related words. Input is lemmatized first so
-    'keys' and 'feeling' resolve to 'key' and 'feel'."""
-    wn = get_wordnet()
-    base = w.replace(" ", "_")
-    for pos in ("n", "v", "a", "r"):
-        m = wn.morphy(base, pos)
-        if m:
-            base = m
-            break
-
-    sections: dict[str, dict[str, str]] = {
-        "synonyms": {}, "opposites": {}, "broader": {}, "related": {}}
-
-    def add(bucket, lemma, pos):
-        name = lemma.name().replace("_", " ").lower()
-        if name not in (w, base) and re.fullmatch(r"[a-z' -]+", name):
-            sections[bucket].setdefault(name, POS_NAMES.get(pos, pos))
-
-    for ss in wn.synsets(base):
-        pos = ss.pos()
-        for lemma in ss.lemmas():
-            add("synonyms", lemma, pos)
-            for ant in lemma.antonyms():
-                add("opposites", ant, pos)
-            for dr in lemma.derivationally_related_forms():
-                add("related", dr, dr.synset().pos())
-        if pos in ("a", "s"):  # adjectives: the satellite clusters
-            for sim in ss.similar_tos():
-                for lemma in sim.lemmas():
-                    add("related", lemma, pos)
-        for hyper in ss.hypernyms():
-            for lemma in hyper.lemmas():
-                add("broader", lemma, pos)
-        for hypo in ss.hyponyms()[:8]:
-            for lemma in hypo.lemmas():
-                add("related", lemma, pos)
-        for other in ss.also_sees() + ss.attributes():
-            for lemma in other.lemmas():
-                add("related", lemma, other.pos())
+    """Word associations from Wiktionary's curated links (same build as
+    the definitions), in sections: synonyms, opposites, broader terms,
+    and related words. Inflections fold in their base's links, so
+    'keys' and 'feeling' draw from 'key' and 'feel'."""
+    th = get_thesaurus()
+    base = lemma_base(w)
+    entries = [th.get(base, {})] + ([th.get(w, {})] if base != w else [])
 
     # a word belongs to its strongest section only
-    caps = {"synonyms": 30, "opposites": 10, "broader": 12, "related": 20}
-    taken: set[str] = set()
+    taken = {w, base}
     out = []
-    for label in ("synonyms", "opposites", "broader", "related"):
-        items = {n: p for n, p in sections[label].items() if n not in taken}
-        ranked = sorted(items.items(),
-                        key=lambda kv: (-zipf_frequency(kv[0], "en"), kv[0]))
-        ranked = ranked[:caps[label]]
-        taken.update(n for n, _ in ranked)
+    for key, label, cap in SYN_SECTIONS:
+        names = []
+        for ent in entries:
+            names += [n for n in ent.get(key, [])
+                      if n not in taken and n not in names]
+        # wordfreq overrates phrases of common words ("high on life"),
+        # so single words lead and phrases follow
+        ranked = sorted(names,
+                        key=lambda n: (" " in n, -zipf_frequency(n, "en"),
+                                       n))[:cap]
+        taken.update(ranked)
         if ranked:
             out.append({"label": label,
-                        "words": [{"word": n, "pos": p} for n, p in ranked]})
+                        "words": [{"word": n} for n in ranked]})
     return out
 
 
@@ -1962,19 +1934,8 @@ def word_data(word: str):
     stress = "".join("1" if p[-1] in "12" else "0"
                      for p in pl if p[-1].isdigit())
     rime = DIGITS.sub("", pronouncing.rhyming_part(phones))
-    senses = None
-    try:
-        wn = get_wordnet()
-        base = w.replace(" ", "_")
-        for pos in ("n", "v", "a", "r"):
-            m = wn.morphy(base, pos)
-            if m:
-                base = m
-                break
-        senses = len(wn.synsets(base)) or None
-    except Exception:
-        pass
     d = definitions_for(w) if " " not in w else {"word": w, "defs": []}
+    senses = get_definitions().get(lemma_base(w), {}).get("n")
     out = {"word": w, "known": True,
            "phones": DIGITS.sub("", phones), "syl": len(stress),
            "stress": stress, "rime": rime, "senses": senses,
@@ -2123,16 +2084,14 @@ def lookup_data(word: str, mode: str = "rhyme", limit: int = 60):
 
 
 def warm() -> None:
-    """Pre-build the slow lazy bits (g2p model, WordNet, indexes) so the
+    """Pre-build the slow lazy bits (g2p model, lexicon, indexes) so the
     first real request doesn't pay for them."""
     try:
         g2p_phones("warmup")
     except Exception:
         pass  # model unavailable; spelling fallbacks still work
-    try:
-        get_wordnet()
-    except Exception:
-        pass
+    get_definitions()
+    get_thesaurus()
     get_slant_index()
     get_multi_indexes()
 

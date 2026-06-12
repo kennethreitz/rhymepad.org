@@ -310,7 +310,7 @@ def test_perfect_subgroup_fuses_with_slant_family():
                "coaster", "roaster", "poster", "toaster")
 
 
-def test_lookup_synonyms_wordnet():
+def test_lookup_synonyms_wiktionary():
     data = lookup("happy", mode="syn")
     flat = {w["word"] for s in data["sections"] for w in s["words"]}
     assert "glad" in flat
@@ -319,7 +319,7 @@ def test_lookup_synonyms_wordnet():
 
 
 def test_lookup_synonyms_lemmatized():
-    data = lookup("keys", mode="syn")  # morphy: keys -> key
+    data = lookup("keys", mode="syn")  # inflection pointer: keys -> key
     assert data["known"] is True
 
 

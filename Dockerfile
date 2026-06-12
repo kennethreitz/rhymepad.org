@@ -17,10 +17,10 @@ COPY app.py rhymes.py ./
 COPY static ./static
 COPY data ./data
 
-# Pre-warm NLTK data so g2p-en and WordNet never download at request time
+# Pre-warm NLTK data so g2p-en never downloads at request time
 # (--no-sync: use the env built above; don't try to install the project)
 RUN uv run --no-sync python -c "import nltk;\
-[nltk.download(p, quiet=True) for p in ('averaged_perceptron_tagger','averaged_perceptron_tagger_eng','cmudict','wordnet','omw-1.4')]" || true
+[nltk.download(p, quiet=True) for p in ('averaged_perceptron_tagger','averaged_perceptron_tagger_eng','cmudict')]" || true
 
 EXPOSE 8000
 

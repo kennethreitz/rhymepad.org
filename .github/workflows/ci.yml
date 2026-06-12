@@ -18,5 +18,5 @@ jobs:
       # under both its old and new (nltk>=3.9) names
       - run: |
           uv run python -c "import nltk;
-          [nltk.download(p, quiet=True) for p in ('averaged_perceptron_tagger','averaged_perceptron_tagger_eng','cmudict','wordnet','omw-1.4')]"
+          [nltk.download(p, quiet=True) for p in ('averaged_perceptron_tagger','averaged_perceptron_tagger_eng','cmudict')]"
       - run: uv run pytest
