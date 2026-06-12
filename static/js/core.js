@@ -251,7 +251,16 @@ async function analyze(){
   }
   render();
 }
-const analyzeSoon = debounce(analyze, 180);
+// rhyme detection waits for the word, not the keystroke: mid-word the
+// pad holds off until a real pause, so half-typed words never flicker
+// into family colors; closing the word (space/punct/newline) analyzes
+// at the usual quick delay
+let analyzeT = null;
+function analyzeSoon(){
+  clearTimeout(analyzeT);
+  const c = editor.value[editor.selectionStart - 1] || '';
+  analyzeT = setTimeout(analyze, /[A-Za-z'’]/.test(c) ? 700 : 180);
+}
 
 function render(){
   persist();
