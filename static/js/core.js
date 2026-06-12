@@ -340,9 +340,12 @@ function render(){
     }
     const lcls = 'lmark' + (/^\s*#/.test(line) ? ' hdr' : /^\s*\[/.test(line) ? ' anno' : '');
     if(ghost && ghost.line === i && ghost.base === line){
-      const gfit = ghost.cands[ghost.sel] && ghost.cands[ghost.sel].fit;
-      h += `<span class="ghost">${line.endsWith(' ') ? '' : ' '}${esc(ghost.text)}` +
-        `${gfit ? '<span class="ghost-fit"> ✦</span>' : ''}</span><span class="ghost-key">tab</span>`;
+      const gc = ghost.cands[ghost.sel] || {};
+      const disp = gc.comp
+        ? ghost.text.slice(ghost.partial.length)
+        : (line.endsWith(' ') ? '' : ' ') + ghost.text;
+      h += `<span class="ghost">${esc(disp)}` +
+        `${gc.fit ? '<span class="ghost-fit"> ✦</span>' : ''}</span><span class="ghost-key">tab</span>`;
     }
     html += (line ? `<span class="${lcls}" data-l="${i}">${h}</span>` : '') + '\n';
   });
@@ -570,9 +573,10 @@ const LEGENDS = {
   suggestToggle: `
     <h4>Suggest</h4>
     <p>Pause at the end of the line you're writing and a quiet ghost
-    offers a landing word that rhymes with the previous line's ending —
+    offers a landing word that answers the stanza's open ending —
     and knows your song: words that echo what you're writing about lead
-    the list, marked <b style="color:var(--accent)">✦</b>.</p>
+    the list, marked <b style="color:var(--accent)">✦</b>. Start typing
+    a word and the ghost narrows to completions of it.</p>
     <p><kbd>Tab</kbd> opens the candidates — syllable dots show which
     fits the bar, <b>~</b> marks slant — <kbd>Enter</kbd> lands it,
     <kbd>Esc</kbd> waves it off. It never types for you; it only
@@ -730,26 +734,36 @@ async function computeGhost(){
   if(!cands || !cands.length) return clear();
   const cur = lastWordOf(line);
   if(cur && (cur === target || cands.some(c=>c.word === cur))) return clear();  // already lands
+  // a trailing fragment turns matching candidates into COMPLETIONS:
+  // type "fi" and the ghost narrows to fire, inserting just the rest
+  const partial = /[A-Za-z']$/.test(line) ? cur : null;
   // skip words already spent as line endings in this draft
   const spent = new Set(lines.map(l=>lastWordOf(l)).filter(Boolean));
-  let avail = cands.filter(c=>!spent.has(c.word.split(' ').pop()) && c.word !== cur);
+  let avail = cands.filter(c=>!spent.has(c.word.split(' ').pop()) && c.word !== cur)
+    .map(c=>({...c, comp: !!(partial && c.word.startsWith(partial)
+                             && c.word.length > partial.length)}));
   if(!avail.length) return clear();
-  // rank: the more draft words a candidate echoes the higher it leads,
-  // the bar breaks ties (when the meter is fresh), slant back-fills
+  // rank: completions of what's being typed lead, then the more draft
+  // words a candidate echoes the higher it sits, the bar breaks ties
+  // (when the meter is fresh), slant back-fills
   const fresh = i => analysis && analysis.lines[i] === lines[i] && analysis.meter && analysis.meter[i];
   let gap = 0;
   if(tline >= 0 && fresh(tline) && fresh(ln))
     gap = analysis.meter[tline].syl - analysis.meter[ln].syl;
+  // a completion's typed vowels are already counted in this line's bar
+  const pv = partial ? (partial.match(/[aeiouy]+/g) || []).length : 0;
   avail = avail.map((c, i)=>({c, i,
+      p: c.comp ? 0 : 1,
       f: -(c.fitn || 0),
-      m: gap >= 1 ? Math.abs(c.syl - gap) : 0,
+      m: gap >= 1 ? Math.abs((c.comp ? c.syl - pv : c.syl) - gap) : 0,
       n: c.near ? 1 : 0}))
-    .sort((a, b)=>a.f - b.f || a.m - b.m || a.n - b.n || a.i - b.i)
+    .sort((a, b)=>a.p - b.p || a.f - b.f || a.m - b.m || a.n - b.n || a.i - b.i)
     .map(x=>x.c);
   avail = avail.slice(0, 8);
-  const sig = avail.map(c=>c.word).join();
-  if(!ghost || ghost.line !== ln || ghost.base !== line || ghost.cands.map(c=>c.word).join() !== sig){
-    ghost = {line: ln, base: line, text: avail[0].word, cands: avail, sel: 0};
+  const sig = avail.map(c=>c.word + (c.comp ? '+' : '')).join();
+  if(!ghost || ghost.line !== ln || ghost.base !== line || ghost.sig !== sig){
+    ghost = {line: ln, base: line, text: avail[0].word, cands: avail, sel: 0,
+             partial, sig};
     render();
   }
 }
@@ -760,7 +774,10 @@ function closeGhostMenu(){ if(ghostMenu){ ghostMenu.remove(); ghostMenu = null; 
 function acceptGhost(word){
   const pos = editor.selectionStart;
   const line = editor.value.split('\n')[ghost.line] || '';
-  const insert = (line.endsWith(' ') ? '' : ' ') + word;
+  const c = ghost.cands.find(x=>x.word === word);
+  const insert = c && c.comp
+    ? word.slice(ghost.partial.length)            // finish the word
+    : (line.endsWith(' ') ? '' : ' ') + word;     // land a new one
   editor.setRangeText(insert, pos, pos, 'end');
   ghost = null; closeGhostMenu();
   render(); analyzeSoon(); buildReadout();
