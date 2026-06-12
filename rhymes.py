@@ -35,7 +35,7 @@ def g2p_phones(word: str) -> str | None:
     phones = [p for p in _g2p(word) if re.fullmatch(r"[A-Z]+[012]?", p)]
     return " ".join(phones) or None
 
-WORD_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ']*")
+WORD_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ'\u2019]*")
 DIGITS = re.compile(r"\d")
 COLORS = 16  # matches --r0..--r15 in the stylesheet
 
@@ -100,7 +100,7 @@ def phones_candidates(word: str) -> tuple[str, ...]:
     and for unknown words BOTH the g2p model's guess and a compound
     split (heresay = here + say) — we can't know which the writer means,
     so the rhyme passes get to match on any of them."""
-    w = word.lower().strip("'")
+    w = word.lower().replace("\u2019", "'").strip("'")
     if not w.isascii():  # naïve, Blasé, café — fold accents for lookup
         import unicodedata
         w = unicodedata.normalize("NFKD", w).encode("ascii", "ignore").decode()
