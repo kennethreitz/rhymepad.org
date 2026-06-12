@@ -256,8 +256,8 @@
   .tab:hover { color: var(--ink); }
   .panel-body { padding: 16px; overflow-y: auto; flex: 1; }
   #tab-lookup { display: flex; flex-direction: column; overflow: hidden; }
-  #tab-lookup > :not(#lookupResults) { flex: 0 0 auto; }
-  #lookupResults {
+  #tab-lookup > :not(#lookupScroll) { flex: 0 0 auto; }
+  #lookupScroll {
     flex: 1; min-height: 0; overflow-y: auto;
     margin: 0 -16px -16px; padding: 0 16px 16px;
   }
@@ -482,9 +482,11 @@ Double-click any word to look it up on the right."></textarea>
         <button data-sub="explore">Explore</button>
       </div>
       <div id="histBar"></div>
-      <div id="defBox"></div>
-      <div id="lookupResults">
-        <p class="muted">Type a word — or double-click one in your draft — and its whole entry appears: how it sounds, what describes it, what rhymes, what could replace it.</p>
+      <div id="lookupScroll">
+        <div id="defBox"></div>
+        <div id="lookupResults">
+          <p class="muted">Type a word — or double-click one in your draft — and its whole entry appears: how it sounds, what describes it, what rhymes, what could replace it.</p>
+        </div>
       </div>
     </div>
 

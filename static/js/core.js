@@ -858,6 +858,7 @@ if(window.matchMedia('(pointer: coarse)').matches){
 ============================================================ */
 const lookupInput = document.getElementById('lookupInput');
 const resultsBox = document.getElementById('lookupResults');
+const lookupScroll = document.getElementById('lookupScroll');
 const histBar = document.getElementById('histBar');
 const defBox = document.getElementById('defBox');
 let curWord = null, lookupSeq = 0, entry = null;
@@ -897,7 +898,7 @@ function renderHistory(){
 async function doLookup(){
   const word = lookupInput.value.trim().replace(/\?$/, '').toLowerCase();
   if(!word || word === curWord) return;
-  resultsBox.scrollTop = 0;
+  lookupScroll.scrollTop = 0;
   if(curWord){
     const i = wordHistory.indexOf(curWord);
     if(i >= 0) wordHistory.splice(i, 1);
@@ -997,7 +998,7 @@ function paintSections(){
     }
   }
   resultsBox.innerHTML = h || `<p class="muted">nothing here for “${esc(e.word)}”.</p>`;
-  resultsBox.scrollTop = 0;
+  lookupScroll.scrollTop = 0;
   resultsBox.querySelectorAll('.chip').forEach(c=>
     c.addEventListener('click', ()=> lookupFor(c.dataset.w)));
 }
