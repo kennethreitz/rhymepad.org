@@ -745,8 +745,9 @@ async function loadFollows(key, prev, prev2){
 const SHORT_OK = new Set(('a i ah an am as be by do go ha he hi if in is it ma me ' +
   'my no of oh on or so to uh up us we ya yo').split(' '));
 
-// grammar: after a determiner the slot wants a noun/adjective; after a
-// modal or "to" it wants a verb. Never offer "ready for the ignite".
+// grammar: after a determiner this slot ENDS the line, so it wants a
+// noun — an adjective-only word ("my own…") dangles, a verb-only word
+// ("the ignite") is nonsense. After a modal or "to" it wants a verb.
 const DET_PREV = new Set(('the a an my your his her its our their this that these ' +
   'those some no every each another').split(' '));
 const VERB_PREV = new Set(("to will would can could should must might shall don't " +
@@ -754,7 +755,8 @@ const VERB_PREV = new Set(("to will would can could should must might shall don'
 function grammarTier(c, prev){
   if(!prev) return 0;
   const pos = c.pos || '';
-  if(DET_PREV.has(prev)) return !pos ? 1 : (/[na]/.test(pos) ? 0 : 2);
+  if(DET_PREV.has(prev))
+    return pos.includes('n') ? 0 : !pos || pos.includes('a') ? 1 : 2;
   if(VERB_PREV.has(prev)) return !pos ? 1 : (pos.includes('v') ? 0 : 2);
   return 0;
 }
@@ -851,7 +853,7 @@ async function computeGhost(){
       n: c.near ? 1 : 0,
       b: follows.bi.has(c.word.split(' ')[0]) ? 0 : 1,
       m: gap >= 1 ? Math.abs((c.comp ? c.syl - pv : c.syl) - gap) : 0}))
-    .sort((a, b)=>a.p - b.p || a.g - b.g || a.t - b.t || a.f - b.f || a.n - b.n
+    .sort((a, b)=>a.p - b.p || a.g - b.g || a.t - b.t || a.n - b.n || a.f - b.f
                 || a.b - b.b || a.m - b.m || a.i - b.i)
     .map(x=>x.c);
   avail = avail.slice(0, 8);
