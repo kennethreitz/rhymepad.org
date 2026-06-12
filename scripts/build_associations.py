@@ -1,5 +1,7 @@
 """Build the server-side replacements for Datamuse's rel_jjb and rel_trg
-from the Tatoeba English corpus (CC BY) — 2M sentences of plain English:
+from three open corpora — Tatoeba (CC BY, 2M sentences), the Gutenberg
+Poetry corpus (public domain, 3M lines of verse — the register a rhyme
+pad wants), and OpenSubtitles (capped at 30M deduped lines of dialogue):
 
 data/describes.json.gz — noun -> [adjectives], from adjective-noun
     adjacency plus copular "noun is adjective" frames, ranked by
@@ -15,6 +17,10 @@ One-time, offline (after the build_definitions.py downloads):
 
     curl -L -o build/eng_sentences.tsv.bz2 \
         https://downloads.tatoeba.org/exports/per_language/eng/eng_sentences.tsv.bz2
+    curl -L -o build/gutenberg-poetry.ndjson.gz \
+        http://static.decontextualize.com/gutenberg-poetry-v001.ndjson.gz
+    curl -L -o build/opensubs-en.txt.gz \
+        https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2018/mono/en.txt.gz
     uv run python scripts/build_associations.py
 """
 
@@ -33,15 +39,19 @@ from wordfreq import zipf_frequency
 ROOT = Path(__file__).parent.parent
 SRC_WIKT = ROOT / "build" / "kaikki-en.jsonl.gz"
 SRC_SENT = ROOT / "build" / "eng_sentences.tsv.bz2"
+SRC_POEM = ROOT / "build" / "gutenberg-poetry.ndjson.gz"
+SRC_SUBS = ROOT / "build" / "opensubs-en.txt.gz"
 OUT_DESC = ROOT / "data" / "describes.json.gz"
 OUT_TRIG = ROOT / "data" / "associations.json.gz"
 
 WORD_OK = re.compile(r"[a-z][a-z']*")
 TOKEN = re.compile(r"[A-Za-z']+")
 WINDOW = 4        # co-occurrence span for associations
-MIN_CO = 3        # pair floor before PMI is believable
-MIN_DESC = 2
+MIN_CO = 5        # pair floor before PMI is believable
+MIN_DESC = 3
 TOP = 25          # per headword
+SUBS_CAP = 30_000_000   # subtitle lines to read (the corpus is ~440M)
+PRUNE_EVERY = 5_000_000  # drop singleton pairs periodically: RAM bound
 COPULA = {"is", "are", "was", "were", "seems", "seemed", "looks",
           "looked", "feels", "felt", "sounds", "smells", "tastes"}
 # quantifiers and function words with vestigial adjective senses in
@@ -91,6 +101,24 @@ def sentences():
     with bz2.open(SRC_SENT, "rt", encoding="utf-8") as f:
         for line in f:
             yield line.split("\t", 2)[-1]
+    with gzip.open(SRC_POEM, "rt", encoding="utf-8") as f:
+        for line in f:
+            yield json.loads(line)["s"]
+    if not SRC_SUBS.exists():
+        print("  (no OpenSubtitles file — skipping)")
+        return
+    seen: set[int] = set()  # dialogue repeats endlessly; dedupe it
+    n = 0
+    with gzip.open(SRC_SUBS, "rt", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            h = hash(line)
+            if h in seen:
+                continue
+            seen.add(h)
+            n += 1
+            if n > SUBS_CAP:
+                return
+            yield line
 
 
 def tokens_of(sent: str) -> list[str]:
@@ -123,13 +151,29 @@ def main():
     uni: Counter = Counter()
     n_sent = 0
 
+    zf = lru_cache(maxsize=None)(lambda t: zipf_frequency(t, "en"))
+
+    def prune(table, label):
+        before = sum(len(c) for c in table.values())
+        for t in list(table):
+            c = table[t]
+            for u in [u for u, k in c.items() if k == 1]:
+                del c[u]
+            if not c:
+                del table[t]
+        print(f"  pruned {label}: {before:,} -> "
+              f"{sum(len(c) for c in table.values()):,} pairs")
+
     for sent in sentences():
         n_sent += 1
         if n_sent % 500_000 == 0:
             print(f"  …{n_sent:,} sentences")
+        if n_sent % PRUNE_EVERY == 0:
+            prune(pair, "assoc")
+            prune(desc, "desc")
         toks = tokens_of(sent)
         content = [t for t in toks if t not in STOP and len(t) > 1
-                   and "'" not in t and zipf_frequency(t, "en") >= 2.0]
+                   and "'" not in t and zf(t) >= 2.0]
         for t in set(content):
             uni[t] += 1
         # describes: "vast ocean" and "the ocean is vast"
