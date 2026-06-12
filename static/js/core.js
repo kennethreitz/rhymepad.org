@@ -922,12 +922,10 @@ async function doLookup(){
   if(el){
     if(info && info.known){
       const dots = [...info.stress].map(s=>s==='1' ? '●' : '○').join('');
-      const mates = draftMates(word);
       el.innerHTML = `/${esc(info.phones.toLowerCase())}/ · ${info.syl} syl ${dots}` +
         ` · rhymes on <i>${esc(info.rime.toLowerCase())}</i>` +
         (info.senses >= 3 ? ` · ${info.senses} senses` : '') +
-        ((info.homophones || []).length ? `<br>sounds like: ${info.homophones.map(esc).join(', ')}` : '') +
-        (mates.length ? `<br>in your draft: ${mates.map(esc).join(', ')}` : '');
+        ((info.homophones || []).length ? `<br>sounds like: ${info.homophones.map(esc).join(', ')}` : '');
     }else{
       el.textContent = 'not in the pronunciation dictionary';
     }
@@ -938,27 +936,11 @@ async function doLookup(){
                  prep:'prep.', conj:'conj.', pron:'pron.', det:'det.', num:'num.'};
     const of = info.def_of ? `<div class="def"><i>→</i> ${esc(info.def_of)}</div>` : '';
     defBox.insertAdjacentHTML('beforeend', '<div class="defs">' + of +
-      defs.map(d=>`<div class="def" title="${esc(d.gloss)}"><i>${POS[d.pos] || esc(d.pos)}</i> ${esc(d.gloss)}</div>`).join('') +
+      defs.map(d=>`<div class="def"><i>${POS[d.pos] || esc(d.pos)}</i> ${esc(d.gloss)}</div>`).join('') +
       '</div>');
   }
   entry = {word, rhyme, syn, desc, trig};
   paintSections();
-}
-
-function draftMates(word){
-  if(!analysis) return [];
-  const lw = word.toLowerCase();
-  const byG = {};
-  analysis.tokens.forEach(t=>{
-    if(t.ph) return;
-    const w = analysis.lines[t.l].slice(t.s, t.e).toLowerCase();
-    (byG[t.g] ||= new Set()).add(w);
-  });
-  const mates = new Set();
-  Object.values(byG).forEach(set=>{
-    if(set.has(lw)) set.forEach(w=>{ if(w !== lw) mates.add(w); });
-  });
-  return [...mates].slice(0, 8);
 }
 
 function rarity(z){
