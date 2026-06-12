@@ -538,6 +538,14 @@ def slant_key(word: str) -> str | None:
     phones = phones_for(word)
     if phones:
         v = _slant_from_phones(phones)
+        if v and " " not in v:
+            # a single REDUCED vowel with no stress is not an assonance
+            # key — line-ending "the" and "and" must not rhyme on bare
+            # schwa. A stressed AH (blood, cup) keeps its key.
+            syls = _tail_syls(phones)
+            if (v in REDUCED and syls
+                    and not syls[0][-1] in "12"):
+                return None
         return ("v:" + v) if v else None
     tail = _grapheme_tail(word)
     if not tail:

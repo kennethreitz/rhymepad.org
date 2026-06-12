@@ -920,3 +920,17 @@ def test_accented_words_tokenize_whole():
     assert "blas" not in spans and "ve" not in spans
     group_with("so blasé on this day\nnaïve in every way", "day", "way")
     group_with("feeling blasé\nevery day", "blasé", "day")
+
+
+def test_unstressed_schwa_is_no_assonance_key():
+    # enjambment endings "the" / "and" must not group on bare schwa
+    text = ("Compliment and compound like the\n"
+            "middle of the poem goes here\n"
+            "mingle with the long lost and")
+    res = analyze(Draft(text=text))
+    bg = defaultdict(set)
+    for t in res["tokens"]:
+        bg[t["g"]].add(res["lines"][t["l"]][t["s"]:t["e"]].lower())
+    assert not any({"the", "and"} <= s for s in bg.values())
+    # stressed AH keeps its assonance: blood / cup
+    group_with("in my blood\nraise the cup", "blood", "cup")
