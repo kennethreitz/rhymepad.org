@@ -1855,6 +1855,7 @@ def get_associations() -> dict:
 
 
 _continuations: dict | None = None
+_trigrams: dict | None = None
 
 
 def get_continuations() -> dict:
@@ -1865,6 +1866,15 @@ def get_continuations() -> dict:
     if _continuations is None:
         _continuations = _load_lexicon("continuations.json.gz")
     return _continuations
+
+
+def get_trigrams() -> dict:
+    """"two words" -> what follows them — idioms the bigram can't see
+    ("from time to _time_")."""
+    global _trigrams
+    if _trigrams is None:
+        _trigrams = _load_lexicon("trigrams.json.gz")
+    return _trigrams
 
 
 def lemma_base(w: str) -> str:
@@ -2232,6 +2242,7 @@ def warm() -> None:
     get_describes()
     get_associations()
     get_continuations()
+    get_trigrams()
     get_slant_index()
     get_multi_indexes()
 

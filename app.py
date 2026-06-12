@@ -86,11 +86,17 @@ def suggest(req: SuggestReq):
 
 
 @app.get("/api/follows")
-def follows(prev: str):
-    """Words that commonly come right after `prev` — phrase fuel for
-    the ghost's ranking."""
+def follows(prev: str, prev2: str | None = None):
+    """Words that commonly come right after `prev` (and after the
+    two-word context `prev2 prev` when known) — phrase fuel for the
+    ghost's ranking. The trigram sees idioms the bigram can't:
+    "from time to _time_", not "to _my_"."""
     w = prev.strip().lower()[:64]
-    return {"prev": w, "words": rhymes.get_continuations().get(w, [])}
+    out = {"prev": w, "words": rhymes.get_continuations().get(w, [])}
+    if prev2:
+        w2 = prev2.strip().lower()[:64]
+        out["tri"] = rhymes.get_trigrams().get(f"{w2} {w}", [])
+    return out
 
 OG_PALETTE = ["#e8814a", "#4ea3e8", "#6fd08c", "#d46fb8",
               "#e8c54a", "#9b7ce8", "#e85a5a", "#46cabf",

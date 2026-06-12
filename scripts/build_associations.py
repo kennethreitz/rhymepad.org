@@ -14,6 +14,10 @@ data/continuations.json.gz — word -> [words that commonly come next],
     raw bigram counts: the ghost ranks candidates that read like
     language after what's already on the line ("you will _find_").
 
+data/trigrams.json.gz — "two words" -> [next], a second pass over the
+    corpora restricted to frequent two-word contexts: idioms the
+    bigram can't see ("from time to _time_", not "to _my_").
+
 Adjective/noun identity comes from Wiktionary POS data (same extract as
 the definitions build), not a tagger.
 
@@ -48,9 +52,13 @@ SRC_SUBS = ROOT / "build" / "opensubs-en.txt.gz"
 OUT_DESC = ROOT / "data" / "describes.json.gz"
 OUT_TRIG = ROOT / "data" / "associations.json.gz"
 OUT_NEXT = ROOT / "data" / "continuations.json.gz"
+OUT_TRI = ROOT / "data" / "trigrams.json.gz"
 NEXT_TOP = 40       # continuations kept per word
 NEXT_MIN = 5        # bigram count floor
 NEXT_PREV_MIN = 50  # a word this rare can't anchor a phrase table
+TRI_CTX_MIN = 300   # two-word contexts must be this common to qualify
+TRI_TOP = 12
+TRI_MIN = 10
 
 WORD_OK = re.compile(r"[a-z][a-z']*")
 TOKEN = re.compile(r"[A-Za-z']+")
@@ -131,6 +139,7 @@ def sentences():
 
 def tokens_of(sent: str) -> list[str]:
     out = []
+    sent = sent.replace("’", "'")  # curly apostrophes: let’s -> let's
     for i, t in enumerate(TOKEN.findall(sent)):
         if i and t[0].isupper():
             continue  # mid-sentence capital = likely a name
@@ -259,9 +268,31 @@ def main():
         if keep:
             out_next[a] = keep
 
+    # pass 2: trigrams, but only for two-word contexts common enough to
+    # mean something — the bigram counts above are the qualifier
+    eligible = {(a, b) for a, c in nxt.items() for b, k in c.items()
+                if k >= TRI_CTX_MIN}
+    print(f"trigram pass: {len(eligible):,} eligible contexts")
+    tri: dict[tuple, Counter] = defaultdict(Counter)
+    n_sent = 0
+    for sent in sentences():
+        n_sent += 1
+        if n_sent % 5_000_000 == 0:
+            print(f"  …{n_sent:,} sentences (pass 2)")
+            prune(tri, "tri")
+        toks = tokens_of(sent)
+        for a, b, c in zip(toks, toks[1:], toks[2:]):
+            if (a, b) in eligible and zf(c) >= 2.0:
+                tri[(a, b)][c] += 1
+    out_tri = {}
+    for (a, b), c in tri.items():
+        keep = [w for w, k in c.most_common(TRI_TOP) if k >= TRI_MIN]
+        if keep:
+            out_tri[f"{a} {b}"] = keep
+
     OUT_DESC.parent.mkdir(exist_ok=True)
     for path, obj in ((OUT_DESC, out_desc), (OUT_TRIG, out_trig),
-                      (OUT_NEXT, out_next)):
+                      (OUT_NEXT, out_next), (OUT_TRI, out_tri)):
         blob = json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
         with gzip.open(path, "wt", encoding="utf-8", compresslevel=9) as f:
             f.write(blob)

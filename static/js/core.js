@@ -725,16 +725,18 @@ async function loadGhostCands(target){
   }catch(e){ delete ghostCache[target]; }
 }
 
-// follows-cache: prev word -> words that commonly come next, for
-// ranking candidates that read like language ("you will _find_")
+// follows-cache: context -> words that commonly come next, for ranking
+// candidates that read like language. The trigram tier sees idioms the
+// bigram can't: "from time to _time_", not "to _my_".
 const followsCache = {};
-async function loadFollows(prev){
-  if(prev in followsCache) return;
-  followsCache[prev] = null;  // in flight
+async function loadFollows(key, prev, prev2){
+  if(key in followsCache) return;
+  followsCache[key] = null;  // in flight
   try{
-    const d = await (await fetch(`/api/follows?prev=${encodeURIComponent(prev)}`)).json();
-    followsCache[prev] = new Set(d.words || []);
-  }catch(e){ delete followsCache[prev]; }
+    const q = `prev=${encodeURIComponent(prev)}` + (prev2 ? `&prev2=${encodeURIComponent(prev2)}` : '');
+    const d = await (await fetch(`/api/follows?${q}`)).json();
+    followsCache[key] = {bi: new Set(d.words || []), tri: new Set(d.tri || [])};
+  }catch(e){ delete followsCache[key]; }
 }
 
 // short fragments that are real words — appends allowed without asking
@@ -793,14 +795,17 @@ async function computeGhost(){
       if(!knownWord[partial]) return clear();
     }
   }
-  // what word comes right before the slot? phrase-rank against it
-  const ws = line.match(/[A-Za-z']+/g) || [];
-  const prevWord = (partial ? ws[ws.length - 2] : ws[ws.length - 1] || '')?.toLowerCase() || null;
-  if(prevWord && !(prevWord in followsCache)){
-    await loadFollows(prevWord);
+  // what comes right before the slot? phrase-rank against it
+  const ws = (line.match(/[A-Za-z']+/g) || []).map(w=>w.toLowerCase());
+  const at = ws.length - (partial ? 2 : 1);
+  const prevWord = at >= 0 ? ws[at] : null;
+  const prev2 = at >= 1 ? ws[at - 1] : null;
+  const fkey = prevWord ? (prev2 ? prev2 + ' ' : '') + prevWord : null;
+  if(fkey && !(fkey in followsCache)){
+    await loadFollows(fkey, prevWord, prev2);
     return computeGhost();
   }
-  const follows = (prevWord && followsCache[prevWord]) || new Set();
+  const follows = (fkey && followsCache[fkey]) || {bi: new Set(), tri: new Set()};
   // rank: completions of what's being typed lead, then the more draft
   // words a candidate echoes the higher it sits, the bar breaks ties
   // (when the meter is fresh), slant back-fills
@@ -812,7 +817,8 @@ async function computeGhost(){
   const pv = partial ? (partial.match(/[aeiouy]+/g) || []).length : 0;
   avail = avail.map((c, i)=>({c, i,
       p: c.comp ? 0 : 1,
-      ph: follows.has(c.word.split(' ')[0]) ? 0 : 1,  // reads like a phrase
+      ph: follows.tri.has(c.word.split(' ')[0]) ? 0      // completes the idiom
+        : follows.bi.has(c.word.split(' ')[0]) ? 1 : 2,  // reads like a phrase
       f: -(c.fitn || 0),
       m: gap >= 1 ? Math.abs((c.comp ? c.syl - pv : c.syl) - gap) : 0,
       n: c.near ? 1 : 0}))
