@@ -858,3 +858,12 @@ def test_same_sound_same_color_across_stanzas():
     assert len(gids) == 2          # still two separate families
     a, b = gids
     assert gcolor[a] == gcolor[b]  # ...wearing the same color
+
+
+def test_neighbor_vowel_slant_thinking_dreaming():
+    # IH and IY sit a hair apart; a shared unstressed tail carries them
+    group_with("about thinking\nwhat my mind is dreaming",
+               "thinking", "dreaming")
+    # but single-vowel slants don't get the merger: bit/beat stay apart
+    res = analyze(Draft(text="the bit\nthe beat"))
+    assert not res["tokens"]

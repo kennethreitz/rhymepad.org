@@ -482,6 +482,20 @@ def weak_end_key(word: str) -> str | None:
     return None
 
 
+def slant_variants(word: str) -> tuple[str, ...]:
+    """The slant key plus a neighbor-vowel variant: IH and IY sit a hair
+    apart, so THINK-ing meets DREAM-ing when a shared unstressed tail
+    carries them. Multi-vowel slants only — bit/beat stay apart."""
+    sk = slant_key(word)
+    if not sk:
+        return ()
+    out = [sk]
+    vs = sk[2:].split()
+    if len(vs) >= 2 and vs[0] == "IH":
+        out.append("v:" + " ".join(["IY"] + vs[1:]))
+    return tuple(out)
+
+
 def weak2_end_key(word: str) -> str | None:
     """Dactylic ending: the last TWO syllables when both are unstressed
     (conSIDering / GATHering rhyme on '-ering' even though their
@@ -837,9 +851,20 @@ def analyze_text(text: str) -> dict:
     by_slant = defaultdict(list)
     for t in tokens:
         if t["is_end"] and id(t) not in grouped:
-            key = slant_key(t["word"])
-            if key:
-                attach_or_collect(t, key, by_slant, group_by_slant)
+            keys = slant_variants(t["word"])
+            joined = False
+            for key in keys:
+                gi = group_by_slant.get((t["sid"], key))
+                if gi is not None and any(abs(m["line"] - t["line"]) <= 8
+                                          for m in raw_groups[gi]["toks"]):
+                    raw_groups[gi]["toks"].append(t)
+                    t["slant"] = True
+                    grouped.add(id(t))
+                    joined = True
+                    break
+            if not joined:
+                for key in keys:
+                    by_slant[(t["sid"], key)].append(t)
     # line-ending PHRASES get the same end-position privilege as words:
     # pure vowel-run matching ("forgotten" / "off of" — AA-schwa)
     end_spans = defaultdict(list)
@@ -1141,9 +1166,9 @@ def analyze_text(text: str) -> dict:
         # think — nobody hears that
         ks = set(rime_keys(w))
         ks |= {k for k in multi_keys(w) if not WEAK_MK.match(k)}
-        sk = slant_key(w)
-        if sk and " " in sk:
-            ks.add(sk)
+        for sk in slant_variants(w):
+            if " " in sk:
+                ks.add(sk)
         return ks
 
     orphans = [t for t in tokens
