@@ -922,9 +922,12 @@ async function doLookup(){
   if(el){
     if(info && info.known){
       const dots = [...info.stress].map(s=>s==='1' ? '●' : '○').join('');
-      el.innerHTML = `/${esc(info.phones.toLowerCase())}/ · ${info.syl} syl ${dots}` +
-        ` · rhymes on <i>${esc(info.rime.toLowerCase())}</i>` +
-        (info.senses >= 3 ? ` · ${info.senses} senses` : '') +
+      // the rime is a suffix of the phones — color it in place
+      const ph = info.phones.toLowerCase(), rime = (info.rime || '').toLowerCase();
+      const phHtml = rime && ph.endsWith(rime)
+        ? esc(ph.slice(0, ph.length - rime.length)) + `<i>${esc(rime)}</i>`
+        : esc(ph);
+      el.innerHTML = `/${phHtml}/ · ${info.syl} syl ${dots}` +
         ((info.homophones || []).length ? `<br>sounds like: ${info.homophones.map(esc).join(', ')}` : '');
     }else{
       el.textContent = 'not in the pronunciation dictionary';
