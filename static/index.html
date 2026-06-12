@@ -255,6 +255,12 @@
   .tab.active { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
   .tab:hover { color: var(--ink); }
   .panel-body { padding: 16px; overflow-y: auto; flex: 1; }
+  #tab-lookup { display: flex; flex-direction: column; overflow: hidden; }
+  #tab-lookup > :not(#lookupResults) { flex: 0 0 auto; }
+  #lookupResults {
+    flex: 1; min-height: 0; overflow-y: auto;
+    margin: 0 -16px -16px; padding: 0 16px 16px;
+  }
   .lookup-row { display: flex; gap: 8px; }
   .lookup-hint { font-size: 11px; margin: 8px 2px 0; }
   .lookup-hint b { color: var(--accent-2); font-weight: 500; }

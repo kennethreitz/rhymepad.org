@@ -897,7 +897,7 @@ function renderHistory(){
 async function doLookup(){
   const word = lookupInput.value.trim().replace(/\?$/, '').toLowerCase();
   if(!word || word === curWord) return;
-  document.getElementById('tab-lookup').scrollTop = 0;
+  resultsBox.scrollTop = 0;
   if(curWord){
     const i = wordHistory.indexOf(curWord);
     if(i >= 0) wordHistory.splice(i, 1);
@@ -972,19 +972,19 @@ function paintSections(){
   if(!e) return;
   let h = '';
   if(subMode === 'explore'){
-    // the meaning side: what it summons, what describes it, what replaces it
-    if(e.trig && e.trig.length){
-      h += `<div class="res-label">associations</div>` + chipHtml(e.trig.map(d=>d.word));
-    }
-    if(e.desc && e.desc.length){
-      h += `<div class="res-label">describes</div>` + chipHtml(e.desc.map(d=>d.word));
-    }
+    // the meaning side: what replaces it, what it summons, what describes it
     if(e.syn && e.syn.known && e.syn.sections.length){
       h += `<div class="res-label">synonyms</div>`;
       e.syn.sections.forEach(s=>{
         if(s.label !== 'synonyms') h += `<div class="res-label sub">${esc(s.label)}</div>`;
         h += chipHtml(s.words.map(d=>d.word), s.label === 'synonyms' ? '' : 'near');
       });
+    }
+    if(e.trig && e.trig.length){
+      h += `<div class="res-label">associations</div>` + chipHtml(e.trig.map(d=>d.word));
+    }
+    if(e.desc && e.desc.length){
+      h += `<div class="res-label">describes</div>` + chipHtml(e.desc.map(d=>d.word));
     }
   }else{
     // the sound side: rhymes, near, multis
@@ -1003,6 +1003,7 @@ function paintSections(){
     }
   }
   resultsBox.innerHTML = h || `<p class="muted">nothing here for “${esc(e.word)}”.</p>`;
+  resultsBox.scrollTop = 0;
   resultsBox.querySelectorAll('.chip').forEach(c=>
     c.addEventListener('click', ()=> lookupFor(c.dataset.w)));
 }
@@ -1370,7 +1371,7 @@ function flash(id,msg){
 
 const tab = (name)=>{
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
-  document.getElementById('tab-lookup').style.display = name==='lookup'?'block':'none';
+  document.getElementById('tab-lookup').style.display = name==='lookup'?'flex':'none';
   document.getElementById('tab-beats').style.display  = name==='beats'?'block':'none';
 };
 document.querySelectorAll('.tab').forEach(t=> t.addEventListener('click', ()=>tab(t.dataset.tab)));
