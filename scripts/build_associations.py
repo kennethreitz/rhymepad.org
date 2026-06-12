@@ -58,7 +58,7 @@ COPULA = {"is", "are", "was", "were", "seems", "seemed", "looks",
 # Wiktionary ("on", "much") — never interesting as describers
 DULL_ADJ = {"much", "more", "most", "many", "few", "fewer", "same",
             "such", "other", "own", "all", "whole", "last", "next",
-            "several", "certain", "various", "due", "non"}
+            "several", "certain", "various", "due", "non", "one"}
 STOP = set("""a an the and or but if then than so as of in on at to for
 from by with about into over after under between out up down off is are
 was were be been being am do does did done doing have has had having will
