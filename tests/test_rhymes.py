@@ -911,3 +911,12 @@ def test_stoptail_phrase_needs_coda_agreement():
     res = analyze(Draft(text="Seem flat in affect and simpler\n"
                               "Especially on this evening"))
     assert not res["tokens"]
+
+
+def test_accented_words_tokenize_whole():
+    # Blasé must not become "Blas", naïve must not split into na + ve
+    res = analyze(Draft(text="so blasé on this day\nnaïve in every way"))
+    spans = {res["lines"][t["l"]][t["s"]:t["e"]].lower() for t in res["tokens"]}
+    assert "blas" not in spans and "ve" not in spans
+    group_with("so blasé on this day\nnaïve in every way", "day", "way")
+    group_with("feeling blasé\nevery day", "blasé", "day")

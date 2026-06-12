@@ -35,7 +35,7 @@ def g2p_phones(word: str) -> str | None:
     phones = [p for p in _g2p(word) if re.fullmatch(r"[A-Z]+[012]?", p)]
     return " ".join(phones) or None
 
-WORD_RE = re.compile(r"[A-Za-z][A-Za-z']*")
+WORD_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ']*")
 DIGITS = re.compile(r"\d")
 COLORS = 16  # matches --r0..--r15 in the stylesheet
 
@@ -89,6 +89,7 @@ OVERRIDES = {
     "balmain": "B AO1 L M EY2 N",  # as rapped: "ball-MAIN"
     "patek": "P AH0 T EH1 K",      # CMU stresses PAH-tek; rap says pa-TEK
     "immeasurable": "IH2 M EH1 ZH ER0 AH0 B AH0 L",  # CMU has a stray AE2
+    "blase": "B L AA0 Z EY1",      # CMU thinks it's "blaze"
 }
 
 
@@ -100,6 +101,11 @@ def phones_candidates(word: str) -> tuple[str, ...]:
     split (heresay = here + say) — we can't know which the writer means,
     so the rhyme passes get to match on any of them."""
     w = word.lower().strip("'")
+    if not w.isascii():  # naïve, Blasé, café — fold accents for lookup
+        import unicodedata
+        w = unicodedata.normalize("NFKD", w).encode("ascii", "ignore").decode()
+        if not w:
+            return ()
     cands = list(pronouncing.phones_for_word(w)[:3])
     if w in OVERRIDES:
         cands.insert(0, OVERRIDES[w])
