@@ -831,11 +831,6 @@ function lookupSelection(){
     .trim().replace(/[^A-Za-z']/g,'');
   if(sel && !sel.includes(' ')){
     tab('lookup');
-    // double-click lands on Wordplay — unless you're mid-Explore
-    if(subMode !== 'explore'){
-      subMode = 'wordplay';
-      [...subSeg.children].forEach(c=>c.classList.toggle('active', c.dataset.sub === subMode));
-    }
     lookupFor(sel);
   }
 }
@@ -862,7 +857,7 @@ const lookupScroll = document.getElementById('lookupScroll');
 const histBar = document.getElementById('histBar');
 const defBox = document.getElementById('defBox');
 let curWord = null, lookupSeq = 0, entry = null;
-let subMode = 'wordplay';
+let subMode = 'explore';
 const subSeg = document.getElementById('subSeg');
 subSeg.addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
