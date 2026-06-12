@@ -232,8 +232,12 @@ def index(d: str | None = None) -> Response:
             ogimg = f"https://rhymepad.org/api/og?d={qd}"
             url = f"https://rhymepad.org/?d={qd}"
             html = html.replace(
-                "<title>RhymePad — a scratchpad for poets &amp; rappers</title>",
+                "<title>RhymePad — rhyme scheme analyzer &amp; writing pad for poets and rappers</title>",
                 f"<title>{t_esc} · RhymePad</title>")
+            # shared drafts are personal pages: keep them out of the index
+            html = html.replace(
+                '<meta name="robots" content="index, follow">',
+                '<meta name="robots" content="noindex">')
             html = re.sub(r'(property="og:title" content=")[^"]*', r"\g<1>" + t_esc, html)
             html = re.sub(r'(name="twitter:title" content=")[^"]*', r"\g<1>" + t_esc, html)
             html = re.sub(r'(property="og:description" content=")[^"]*', r"\g<1>" + d_esc, html)

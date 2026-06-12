@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>RhymePad — a scratchpad for poets &amp; rappers</title>
-<meta name="description" content="Write lyrics and poems with live phonetic rhyme detection — internal rhymes, multisyllabics, multi-word mosaics — plus rhyme & synonym lookup, beats, and per-line meter.">
+<title>RhymePad — rhyme scheme analyzer &amp; writing pad for poets and rappers</title>
+<meta name="description" content="Free rhyme scheme analyzer and writing pad: see internal rhymes, slant rhymes, and multisyllabic rhyme schemes color-coded as you write. Phonetic rhyme finder, syllable counter, beats, and rhyming dictionary built in.">
 <meta property="og:title" content="RhymePad">
 <meta property="og:description" content="A scratchpad that color-codes your rhyme schemes as you write. Real phonetic analysis: internal rhymes, slant rhymes, multi-word mosaics. Yes, it knows orange rhymes with door hinge.">
 <meta property="og:type" content="website">
@@ -16,7 +16,7 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="RhymePad — a verse with its rhyme scheme color-coded.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="RhymePad — a scratchpad for poets & rappers">
+<meta name="twitter:title" content="RhymePad — rhyme scheme analyzer & writing pad">
 <meta name="twitter:description" content="Write lyrics with live phonetic rhyme detection — internal rhymes, slant rhymes, multi-word mosaics, color-coded as you type. Yes, it knows orange rhymes with door hinge.">
 <meta name="twitter:image" content="https://rhymepad.org/og.png">
 <meta name="author" content="Kenneth Reitz">
@@ -256,6 +256,8 @@
   .tab:hover { color: var(--ink); }
   .panel-body { padding: 16px; overflow-y: auto; flex: 1; }
   .lookup-row { display: flex; gap: 8px; }
+  .lookup-hint { font-size: 11px; margin: 8px 2px 0; }
+  .lookup-hint b { color: var(--accent-2); font-weight: 500; }
   #histBar { color: var(--ink-dim); font-size: 12px; margin: 8px 2px 0; min-height: 0; }
   #histBar .hist { cursor: pointer; }
   #histBar .hist:hover { color: var(--accent); }
@@ -411,6 +413,13 @@
 <script defer src="https://analytics.kennethreitz.org/script.js" data-website-id="2bb8ad58-25d3-41bf-aa4c-f7d236410e17"></script>
 </head>
 <body>
+<noscript>
+  <p>RhymePad is a free rhyme scheme analyzer and writing pad for poets,
+  rappers, and songwriters. Paste or write lyrics and it color-codes the
+  rhyme scheme phonetically — perfect rhymes, internal rhymes, slant
+  rhymes, and multisyllabic rhymes — with a rhyming dictionary, syllable
+  counts, alliteration, and beats built in. It requires JavaScript.</p>
+</noscript>
 <div class="wrap">
   <header>
     <div class="brandwrap">
@@ -458,6 +467,7 @@ Double-click any word to look it up on the right."></textarea>
       <div class="lookup-row">
         <input id="lookupInput" placeholder="look up a word…" autocomplete="off">
       </div>
+      <p class="muted lookup-hint" id="lookupHint">tip: <b>double-click any word</b> in your draft to look it up here</p>
       <div class="seg" id="subSeg">
         <button class="active" data-sub="wordplay">Wordplay</button>
         <button data-sub="explore">Explore</button>
@@ -648,7 +658,7 @@ function persist(){
       if(el) el.textContent = title;
     }
     document.title = (title && title !== 'Untitled')
-      ? title + ' · RhymePad' : 'RhymePad — a scratchpad for poets & rappers';
+      ? title + ' · RhymePad' : 'RhymePad — rhyme scheme analyzer & writing pad for poets and rappers';
     saveDocs();
   }catch(e){ /* storage full/blocked */ }
 }
@@ -1340,6 +1350,8 @@ function lookupSelection(){
 }
 editor.addEventListener('dblclick', lookupSelection);
 if(window.matchMedia('(pointer: coarse)').matches){
+  const _lh = document.getElementById('lookupHint');
+  if(_lh) _lh.innerHTML = 'tip: <b>select any word</b> in your draft to look it up here';
   // no double-click on touch — long-press word selection does the job
   editor.addEventListener('select', debounce(()=>{
     const len = editor.selectionEnd - editor.selectionStart;
@@ -1376,6 +1388,8 @@ lookupInput.addEventListener('input', debounce(()=>{
 }, 400));
 
 function lookupFor(word){
+  const hint = document.getElementById('lookupHint');
+  if(hint) hint.remove();  // the tip has done its job
   lookupInput.value = word;
   doLookup();
 }
