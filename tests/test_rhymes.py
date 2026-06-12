@@ -625,6 +625,15 @@ def test_lookup_desc_unknown_word_is_quiet():
     assert lookup("xqzzqx", mode="desc")["known"] is False
 
 
+def test_meaning_chips_chime_when_they_rhyme():
+    # a synonym that also rhymes is the jackpot — it floats first, gold
+    data = lookup("light", mode="syn")
+    syn = next(s for s in data["sections"] if s["label"] == "synonyms")
+    chimes = {w["word"] for w in syn["words"] if w.get("chime") == "perfect"}
+    assert {"bright", "white"} & chimes
+    assert syn["words"][0].get("chime")  # chiming words lead the section
+
+
 def test_unanswered_endings_reported():
     res = analyze(Draft(text="the cat\nso blue\na hat\nthe end"))
     opens = {res["lines"][o["l"]][o["s"]:o["e"]] for o in res["open"]}

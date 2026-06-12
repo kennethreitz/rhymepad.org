@@ -947,13 +947,15 @@ function rarity(z){
   return z >= 4.6 ? ' common' : (z < 3.4 ? ' rare' : '');
 }
 function chipHtml(items, cls){
-  // items: strings or {word, z}; words already in the draft get a tick
+  // items: strings or {word, z, chime}; words already in the draft get
+  // a tick, words that also rhyme with the entry chime in gold
   const inDraft = new Set((editor.value.toLowerCase().match(/[a-z']+/g)) || []);
   return '<div class="results">' +
     items.map(d=>{
       const w = d.word || d, r = rarity(d.z);
       const used = inDraft.has(w.toLowerCase()) ? ' indraft' : '';
-      return `<span class="chip${cls ? ' ' + cls : ''}${r}${used}" data-w="${esc(w)}">${esc(w)}</span>`;
+      const ch = d.chime === 'perfect' ? ' chime' : (d.chime === 'near' ? ' chime soft' : '');
+      return `<span class="chip${cls ? ' ' + cls : ''}${r}${used}${ch}" data-w="${esc(w)}">${esc(w)}</span>`;
     }).join('') + '</div>';
 }
 
@@ -967,14 +969,14 @@ function paintSections(){
       h += `<div class="res-label">synonyms</div>`;
       e.syn.sections.forEach(s=>{
         if(s.label !== 'synonyms') h += `<div class="res-label sub">${esc(s.label)}</div>`;
-        h += chipHtml(s.words.map(d=>d.word), s.label === 'synonyms' ? '' : 'near');
+        h += chipHtml(s.words, s.label === 'synonyms' ? '' : 'near');
       });
     }
     if(e.trig && e.trig.known && e.trig.words.length){
-      h += `<div class="res-label">associations</div>` + chipHtml(e.trig.words.map(d=>d.word));
+      h += `<div class="res-label">associations</div>` + chipHtml(e.trig.words);
     }
     if(e.desc && e.desc.known && e.desc.words.length){
-      h += `<div class="res-label">describes</div>` + chipHtml(e.desc.words.map(d=>d.word));
+      h += `<div class="res-label">describes</div>` + chipHtml(e.desc.words);
     }
   }else{
     // the sound side: rhymes, near, multis

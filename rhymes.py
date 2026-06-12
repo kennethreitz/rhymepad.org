@@ -2077,6 +2077,28 @@ def multis_for(w: str, exclude: set, limit: int = 14) -> list[str]:
     return out
 
 
+def _annotate_chips(names: list[str], w: str) -> list[dict]:
+    """Meaning chips that also rhyme with the looked-up word chime:
+    they float to the front of their section, tagged perfect or near,
+    so sound-matches inside meaning-land light up."""
+    tp = pronouncing.phones_for_word(w)
+    t_rime = DIGITS.sub("", pronouncing.rhyming_part(tp[0])) if tp else None
+    t_slant = _slant_from_phones(tp[0]) if tp else None
+    out = []
+    for n in names:
+        d = {"word": n, "z": round(zipf_frequency(n, "en"), 1)}
+        ph = None if " " in n else pronouncing.phones_for_word(n)
+        if t_rime and ph:
+            if DIGITS.sub("", pronouncing.rhyming_part(ph[0])) == t_rime:
+                d["chime"] = "perfect"
+            elif t_slant and _slant_from_phones(ph[0]) == t_slant:
+                d["chime"] = "near"
+        out.append(d)
+    rank = {"perfect": 0, "near": 1}
+    out.sort(key=lambda d: rank.get(d.get("chime"), 2))  # stable
+    return out
+
+
 def lookup_data(word: str, mode: str = "rhyme", limit: int = 60):
     w = word.strip().lower()[:64]
     limit = min(limit, 200)
@@ -2086,13 +2108,15 @@ def lookup_data(word: str, mode: str = "rhyme", limit: int = 60):
         w = rhyme_on
     if mode == "syn":
         sections = synonyms_for(w, limit)
+        for s in sections:
+            s["words"] = _annotate_chips([d["word"] for d in s["words"]], w)
         return {"word": w, "mode": mode, "known": bool(sections),
                 "sections": sections}
     if mode in ("desc", "trig"):
         table = get_describes() if mode == "desc" else get_associations()
         found = table.get(w) or table.get(lemma_base(w)) or []
         return {"word": w, "mode": mode, "known": bool(found),
-                "words": [{"word": n} for n in found[:limit]]}
+                "words": _annotate_chips(found[:limit], w)}
     phones = phones_for(w)
     if not phones:
         return {"word": w, "mode": mode, "known": False, "words": []}

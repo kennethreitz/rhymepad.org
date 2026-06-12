@@ -299,6 +299,12 @@
   .chip.near { border-style: dashed; color: var(--ink-dim); }
   .chip.indraft::after { content: " ✓"; color: var(--accent-2); }
   .chip.near:hover { color: var(--accent); }
+  /* meaning chips that also rhyme with the entry — gold = sound,
+     brightness = strength, same grammar as the pad */
+  .chip.chime { border-color: var(--accent-2); }
+  .chip.chime::before { content: "♪ "; color: var(--accent-2); }
+  .chip.chime.soft { border-color: color-mix(in srgb, var(--accent-2) 40%, var(--line)); }
+  .chip.chime.soft::before { opacity: .55; }
   .muted { color: var(--ink-dim); font-size: 13px; line-height: 1.6; }
   .res-label { font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-dim); margin:16px 0 4px; }
 
