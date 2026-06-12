@@ -9,7 +9,9 @@ from collections import defaultdict
 
 import pytest
 
+import rhymes
 from app import Draft, analyze, lookup
+from rhymes import word_data
 
 
 def groups(text: str) -> list[set[str]]:
@@ -572,6 +574,25 @@ def test_alliteration_needs_three_and_locality():
 def test_word_senses():
     from app import word_info
     assert word_info(word="light")["senses"] >= 10
+
+
+def test_definitions_from_wiktionary():
+    # no WordNet, no network — glosses come from data/definitions.json.gz
+    d = rhymes.definitions_for("light")
+    assert d["word"] == "light" and len(d["defs"]) >= 2
+    assert all(d2["pos"] and d2["gloss"] for d2 in d["defs"])
+
+
+def test_definitions_inflection_resolves_to_base():
+    # "ran" is mostly "run", despite its own obscure yarn-winch noun
+    d = rhymes.definitions_for("ran")
+    assert d["word"] == "run" and d["defs"]
+    info = word_data("hums")
+    assert info["def_of"] == "hum" and info["defs"]
+
+
+def test_definitions_unknown_word_is_quiet():
+    assert rhymes.definitions_for("asdfgh") == {"word": "asdfgh", "defs": []}
 
 
 def test_unanswered_endings_reported():

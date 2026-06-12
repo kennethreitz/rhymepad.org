@@ -15,6 +15,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app.py rhymes.py ./
 COPY static ./static
+COPY data ./data
 
 # Pre-warm NLTK data so g2p-en and WordNet never download at request time
 # (--no-sync: use the env built above; don't try to install the project)

@@ -932,6 +932,15 @@ async function doLookup(){
       el.textContent = 'not in the pronunciation dictionary';
     }
   }
+  const defs = (info && info.defs) || [];
+  if(defs.length){
+    const POS = {noun:'n.', verb:'v.', adj:'adj.', adv:'adv.', intj:'interj.',
+                 prep:'prep.', conj:'conj.', pron:'pron.', det:'det.', num:'num.'};
+    const of = info.def_of ? `<div class="def"><i>→</i> ${esc(info.def_of)}</div>` : '';
+    defBox.insertAdjacentHTML('beforeend', '<div class="defs">' + of +
+      defs.map(d=>`<div class="def" title="${esc(d.gloss)}"><i>${POS[d.pos] || esc(d.pos)}</i> ${esc(d.gloss)}</div>`).join('') +
+      '</div>');
+  }
   entry = {word, rhyme, syn, desc, trig};
   paintSections();
 }

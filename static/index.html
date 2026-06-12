@@ -285,6 +285,12 @@
   .defhead { margin-top: 14px; font-size: 15px; }
   .defphon { font-size: 12px; margin: 4px 0 2px; line-height: 1.6; }
   .defphon i { color: var(--accent-2); font-style: normal; }
+  .defs { margin-top: 6px; }
+  .defs .def {
+    font-size: 12px; color: var(--ink-dim); line-height: 1.7;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .defs .def i { color: var(--accent-2); font-style: normal; }
   .chip {
     font-size: 13px; background: var(--panel-2); border: 1px solid var(--line);
     color: var(--ink); padding: 5px 10px; border-radius: 999px; cursor: pointer;
@@ -509,7 +515,7 @@ Double-click any word to look it up on the right."></textarea>
     </div>
   </aside>
 
-  <footer>built by <a href="https://kennethreitz.org" rel="author">Kenneth Reitz</a> · <a href="https://kennethreitz.org/essays/2026-06-11-rhymepad_seeing_the_sound">how it hears rhymes</a> · <a href="mailto:me@kennethreitz.org?subject=RhymePad">contact</a></footer>
+  <footer>built by <a href="https://kennethreitz.org" rel="author">Kenneth Reitz</a> · <a href="https://kennethreitz.org/essays/2026-06-11-rhymepad_seeing_the_sound">how it hears rhymes</a> · <a href="mailto:me@kennethreitz.org?subject=RhymePad">contact</a> · definitions from <a href="https://en.wiktionary.org/" rel="external">Wiktionary</a> (CC&nbsp;BY-SA)</footer>
 </div>
 
 <script type="module" src="js/core.js"></script>

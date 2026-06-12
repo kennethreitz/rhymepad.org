@@ -1797,6 +1797,42 @@ def get_slant_index() -> dict[str, set[str]]:
     return _slant_index
 
 
+_definitions: dict | None = None
+
+
+def get_definitions() -> dict:
+    """Wiktionary glosses from data/definitions.json.gz — built offline by
+    scripts/build_definitions.py. No WordNet, no network: word -> list of
+    [pos, gloss] pairs, or [["of", base]] for pure inflections."""
+    global _definitions
+    if _definitions is None:
+        import gzip
+        import json
+        from pathlib import Path
+        path = Path(__file__).parent / "data" / "definitions.json.gz"
+        try:
+            with gzip.open(path, "rt", encoding="utf-8") as f:
+                _definitions = json.load(f)
+        except OSError:
+            _definitions = {}
+    return _definitions
+
+
+def definitions_for(w: str) -> dict:
+    """Senses for a word; inflections lead with their base's senses
+    ("ran" is mostly "run"), then any senses of their own. Returns the
+    headword the leading glosses belong to and the [pos, gloss] pairs."""
+    defs = get_definitions()
+    entry, base = defs.get(w, []), w
+    if entry and entry[0][0] == "of":
+        base = entry[0][1]
+        entry = defs.get(base, []) + entry[1:]
+    if not entry:
+        return {"word": w, "defs": []}
+    return {"word": base,
+            "defs": [{"pos": p, "gloss": g} for p, g in entry[:4]]}
+
+
 _wordnet = None
 
 
@@ -1938,11 +1974,16 @@ def word_data(word: str):
         senses = len(wn.synsets(base)) or None
     except Exception:
         pass
-    return {"word": w, "known": True,
-            "phones": DIGITS.sub("", phones), "syl": len(stress),
-            "stress": stress, "rime": rime, "senses": senses,
-            "homophones": [] if " " in w else get_homophones(w, phones),
-            "zipf": round(zipf_frequency(w, "en"), 1)}
+    d = definitions_for(w) if " " not in w else {"word": w, "defs": []}
+    out = {"word": w, "known": True,
+           "phones": DIGITS.sub("", phones), "syl": len(stress),
+           "stress": stress, "rime": rime, "senses": senses,
+           "homophones": [] if " " in w else get_homophones(w, phones),
+           "zipf": round(zipf_frequency(w, "en"), 1),
+           "defs": d["defs"]}
+    if d["word"] != w:
+        out["def_of"] = d["word"]
+    return out
 
 
 _multi_left: dict[str, list[str]] | None = None
