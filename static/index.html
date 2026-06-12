@@ -366,6 +366,11 @@
     display: flex; justify-content: space-between; gap: 14px;
   }
   .ghost-menu .gm-syl { color: var(--ink-dim); letter-spacing: 2px; }
+  .ghost-menu .gm-fit, .ghost-fit { color: var(--accent); opacity: .9; }
+  .ghost-menu .gm-item.near { color: var(--ink-dim); }
+  .ghost-menu .gm-item.near > span:first-child::after {
+    content: " ~"; color: var(--ink-dim); opacity: .7;
+  }
   .beta { font-size: 9px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .08em; vertical-align: 2px; }
   .ghost-menu .gm-item.sel {
     background: color-mix(in srgb, var(--accent) 22%, transparent);

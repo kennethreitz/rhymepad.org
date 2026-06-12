@@ -339,8 +339,11 @@ function render(){
       }
     }
     const lcls = 'lmark' + (/^\s*#/.test(line) ? ' hdr' : /^\s*\[/.test(line) ? ' anno' : '');
-    if(ghost && ghost.line === i && ghost.base === line)
-      h += `<span class="ghost">${line.endsWith(' ') ? '' : ' '}${esc(ghost.text)}</span><span class="ghost-key">tab</span>`;
+    if(ghost && ghost.line === i && ghost.base === line){
+      const gfit = ghost.cands[ghost.sel] && ghost.cands[ghost.sel].fit;
+      h += `<span class="ghost">${line.endsWith(' ') ? '' : ' '}${esc(ghost.text)}` +
+        `${gfit ? '<span class="ghost-fit"> ✦</span>' : ''}</span><span class="ghost-key">tab</span>`;
+    }
     html += (line ? `<span class="${lcls}" data-l="${i}">${h}</span>` : '') + '\n';
   });
   highlight.innerHTML = html;
@@ -567,10 +570,13 @@ const LEGENDS = {
   suggestToggle: `
     <h4>Suggest</h4>
     <p>Pause at the end of the line you're writing and a quiet ghost
-    offers a landing word that rhymes with the previous line's ending.</p>
+    offers a landing word that rhymes with the previous line's ending —
+    and knows your song: words that echo what you're writing about lead
+    the list, marked <b style="color:var(--accent)">✦</b>.</p>
     <p><kbd>Tab</kbd> opens the candidates — syllable dots show which
-    fits the bar — <kbd>Enter</kbd> lands it, <kbd>Esc</kbd> waves it
-    off. It never types for you; it only offers.</p>`,
+    fits the bar, <b>~</b> marks slant — <kbd>Enter</kbd> lands it,
+    <kbd>Esc</kbd> waves it off. It never types for you; it only
+    offers.</p>`,
   exploreToggle: `
     <h4>Explore</h4>
     <p>Hover, for fingers: the pad goes read-only so a tap lights up the
@@ -708,10 +714,15 @@ async function computeGhost(){
   if(!(target in ghostCache)){
     ghostCache[target] = null;  // in flight
     try{
-      const r = await fetch(`/api/lookup?word=${encodeURIComponent(target)}&mode=rhyme`);
+      // draft-aware: candidates that echo the song carry a fit
+      const r = await fetch('/api/suggest', {method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({word: target, text: editor.value})});
       const d = await r.json();
-      ghostCache[target] = (d.words || [])
-        .map(w=>({word: w.word.toLowerCase(), syl: w.syl || 1, z: w.z || 0}));
+      const shape = (w, near)=>({word: w.word.toLowerCase(), syl: w.syl || 1,
+                                 z: w.z || 0, fit: w.fit || null, near});
+      ghostCache[target] = (d.words || []).map(w=>shape(w, false))
+        .concat((d.near || []).map(w=>shape(w, true)));
     }catch(e){ delete ghostCache[target]; return; }
     // the caret may have moved while we fetched
     return computeGhost();
@@ -724,17 +735,18 @@ async function computeGhost(){
   const spent = new Set(lines.map(l=>lastWordOf(l)).filter(Boolean));
   let avail = cands.filter(c=>!spent.has(c.word) && c.word !== cur);
   if(!avail.length) return clear();
-  // fit the bar: when the meter is fresh for both lines, prefer the
-  // candidate whose syllables land this line closest to the last one
+  // rank: words that echo the song lead, the bar breaks ties (when the
+  // meter is fresh for both lines), slant rhymes back-fill last
   const fresh = i => analysis && analysis.lines[i] === lines[i] && analysis.meter && analysis.meter[i];
-  if(tline >= 0 && fresh(tline) && fresh(ln)){
-    const gap = analysis.meter[tline].syl - analysis.meter[ln].syl;
-    if(gap >= 1){
-      avail = avail.map((c, i)=>({c, i, fit: Math.abs(c.syl - gap)}))
-        .sort((a, b)=>a.fit - b.fit || a.i - b.i)
-        .map(x=>x.c);
-    }
-  }
+  let gap = 0;
+  if(tline >= 0 && fresh(tline) && fresh(ln))
+    gap = analysis.meter[tline].syl - analysis.meter[ln].syl;
+  avail = avail.map((c, i)=>({c, i,
+      f: c.fit ? 0 : 1,
+      m: gap >= 1 ? Math.abs(c.syl - gap) : 0,
+      n: c.near ? 1 : 0}))
+    .sort((a, b)=>a.f - b.f || a.m - b.m || a.n - b.n || a.i - b.i)
+    .map(x=>x.c);
   avail = avail.slice(0, 8);
   const sig = avail.map(c=>c.word).join();
   if(!ghost || ghost.line !== ln || ghost.base !== line || ghost.cands.map(c=>c.word).join() !== sig){
@@ -762,8 +774,10 @@ function openGhostMenu(){
   ghostMenu.className = 'ghost-menu';
   ghost.cands.forEach((c, i)=>{
     const it = document.createElement('div');
-    it.className = 'gm-item' + (i === ghost.sel ? ' sel' : '');
-    it.innerHTML = `<span>${esc(c.word)}</span><span class="gm-syl">${'\u00b7'.repeat(Math.min(c.syl, 6))}</span>`;
+    it.className = 'gm-item' + (i === ghost.sel ? ' sel' : '') + (c.near ? ' near' : '');
+    if(c.fit) it.title = `echoes \u201c${c.fit}\u201d in your draft`;
+    it.innerHTML = `<span>${esc(c.word)}${c.fit ? '<span class="gm-fit"> \u2726</span>' : ''}</span>` +
+      `<span class="gm-syl">${'\u00b7'.repeat(Math.min(c.syl, 6))}</span>`;
     it.addEventListener('mousedown', e=>e.preventDefault());  // keep editor focus
     it.addEventListener('click', ()=>acceptGhost(c.word));
     it.addEventListener('mouseenter', ()=>{ ghost.sel = i; ghost.text = c.word; render(); paintGhostMenu(); });
