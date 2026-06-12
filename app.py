@@ -168,12 +168,6 @@ def _render_og(d: str) -> bytes:
             x0, x1 = xat(line, t["s"]), xat(line, t["e"])
             dr.rounded_rectangle([x0 - 4, y - 5, x1 + 4, y + fs + 7],
                                  radius=7, fill=gcolor[t["g"]] + (alpha,))
-        for o in open_by.get(i, []):
-            if o["e"] > len(line):
-                continue
-            x0, x1 = xat(line, o["s"]), xat(line, o["e"])
-            dr.rounded_rectangle([x0 - 4, y - 5, x1 + 4, y + fs + 7],
-                                 radius=7, fill=OG_INK + (33,))
         # base text — headers bold-bright, annotations dim, lyric ink
         if line.lstrip().startswith("#"):
             dr.text((PAD, y), line, font=hdr_f, fill=(138, 125, 108))

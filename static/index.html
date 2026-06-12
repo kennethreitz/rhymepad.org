@@ -794,7 +794,7 @@ function render(){
     const words = toks.filter(t=>!t.ph);
     const phrases = toks.filter(t=>t.ph);
     const als = (allitToggle.checked && fresh) ? (allitByLine[i] || []) : [];
-    const opens = (rhymeToggle.checked && fresh) ? (openByLine[i] || []) : [];
+    const opens = [];
     const kj = (karaokeSpan && karaokeSpan.l === i) ? karaokeSpan : null;
     const nears = (rhymeToggle.checked && fresh) ? (nearByLine[i] || []) : [];
     let h = '';
@@ -835,8 +835,6 @@ function render(){
           // the whole rhyming word takes a quiet tint of the family color
           const mix = Math.round(28 + 32 * str);
           style += `color:color-mix(in srgb, ${colorOf(t)} ${mix}%, var(--ink));`;
-        }else if(op){
-          style += `background:color-mix(in srgb, var(--ink-dim) 13%, transparent);`;
         }
         if(al) shadows.push(`inset 0 -2px 0 0 color-mix(in srgb, var(--r${al.g % COLORS}) 75%, transparent)`);
         if(nr) style += 'text-decoration:underline dotted color-mix(in srgb, var(--accent-2) 60%, transparent);text-underline-offset:3px;';
@@ -1045,8 +1043,6 @@ const LEGENDS = {
       <i>perfect rhyme — the underline marks the exact rhyming part</i>
       <span class="chip" style="background:color-mix(in srgb,var(--r1) 14%,transparent);color:color-mix(in srgb,var(--r1) 32%,var(--ink))">mine</span>
       <i>slant rhyme — fainter fill, weaker grip</i>
-      <span class="chip" style="background:color-mix(in srgb,var(--ink) 13%,transparent)">cold</span>
-      <i>unanswered — an ending no line replies to yet</i>
       <span class="chip" style="text-decoration:underline dotted color-mix(in srgb,var(--accent-2) 70%,transparent);text-underline-offset:3px">bond</span>
       <i>near-miss — one sound from rhyming; a small edit locks it</i>
     </div>
@@ -1561,7 +1557,6 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
     const on = rhymeToggle.checked && fresh;
     const toks = (on ? (tokByLine[i] || []) : []).filter(t=>groupInfo[t.g]);
     const words = toks.filter(t=>!t.ph), phrases = toks.filter(t=>t.ph);
-    const opens = on ? (openByLine[i] || []) : [];
     const nears = on ? (nearByLine[i] || []) : [];
     const palHex = t => palette[groupInfo[t.g].color % COLORS];
 
@@ -1576,13 +1571,6 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
       x.fill(); x.globalAlpha = 1;
     };
     phrases.forEach(t=>fillTok(t)); words.forEach(t=>fillTok(t));
-    // gray fill on unanswered endings
-    opens.forEach(t=>{
-      x.globalAlpha = 0.13; x.fillStyle = ink;
-      x.beginPath();
-      x.roundRect(xat(line,t.s) - 2, y - FS*0.72, xat(line,t.e)-xat(line,t.s) + 4, FS*1.42, 4);
-      x.fill(); x.globalAlpha = 1;
-    });
 
     // 2) base text (ink, or dim for headers/annotations)
     const isHdr = /^\s*#/.test(line), isAnno = /^\s*\[/.test(line);
