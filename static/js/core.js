@@ -691,23 +691,45 @@ function lastWordOf(s){
   return m ? m[0].toLowerCase() : null;
 }
 
-// the target: the nearest UNANSWERED ending in this stanza — answer
-// the scheme, not blindly the previous line (in ABAB, land the B).
-// Fallback when nothing's open: the previous lyric line's ending.
-function ghostTarget(lines, ln){
+// the targets, nearest-need first: every UNANSWERED ending in this
+// stanza (the gray fills, begging), then each established end-rhyme
+// family's most recent word (extending a thread is a legit landing).
+// Fallback when the stanza offers nothing: the previous line's ending.
+function ghostTargets(lines, ln){
+  const out = [], seen = new Set();
+  const fresh = l => analysis && analysis.lines[l] === lines[l];
   const openLines = new Set();
-  if(analysis) (analysis.open || []).forEach(o=>{
-    if(analysis.lines[o.l] === lines[o.l]) openLines.add(o.l);
-  });
-  let target = null, tline = -1;
-  for(let j = ln - 1; j >= 0; j--){
+  if(analysis) (analysis.open || []).forEach(o=>{ if(fresh(o.l)) openLines.add(o.l); });
+  let start = ln;
+  for(let j = ln - 1; j >= 0 && lines[j].trim(); j--) start = j;
+  let fallback = null;
+  for(let j = ln - 1; j >= start; j--){
     const prev = lines[j];
-    if(!prev.trim()) break;                 // stanza boundary
     if(/^\s*[#\[]/.test(prev)) continue;  // annotations don't end lines
-    if(tline < 0){ tline = j; target = lastWordOf(prev); }  // fallback
-    if(openLines.has(j)){ tline = j; target = lastWordOf(prev); break; }
+    const w = lastWordOf(prev);
+    if(!w) continue;
+    if(!fallback) fallback = {target: w, tline: j, color: null, open: false};
+    if(openLines.has(j) && !seen.has(w)){
+      seen.add(w);
+      out.push({target: w, tline: j, color: null, open: true});
+    }
   }
-  return {target, tline};
+  if(analysis){
+    const gcolor = {};
+    (analysis.groups || []).forEach(g=>{ gcolor[g.id] = g.color; });
+    const byFam = {};
+    (analysis.tokens || []).forEach(t=>{
+      if(t.ph || !t.end || t.l >= ln || t.l < start || !fresh(t.l)) return;
+      const w = lines[t.l].slice(t.s, t.e).toLowerCase();
+      if(!byFam[t.g] || byFam[t.g].tline < t.l)
+        byFam[t.g] = {target: w, tline: t.l, color: gcolor[t.g] ?? null, open: false};
+    });
+    Object.values(byFam).sort((a, b)=>b.tline - a.tline).forEach(f=>{
+      if(!seen.has(f.target)){ seen.add(f.target); out.push(f); }
+    });
+  }
+  if(!out.length && fallback) out.push(fallback);
+  return out.slice(0, 3);
 }
 
 async function loadGhostCands(target){
@@ -779,38 +801,47 @@ async function computeGhost(){
   const line = lines[ln] || '';
   if(col !== line.length || /^\s*[#\[]/.test(line)) return clear();
   if(!line.trim()){
-    // a fresh line: warm the cache now so the pause costs nothing
-    const t = ghostTarget(lines, ln);
-    if(t.target) loadGhostCands(t.target);
+    // a fresh line: warm the caches now so the pause costs nothing
+    ghostTargets(lines, ln).forEach(t=>loadGhostCands(t.target));
     return clear();
   }
-  const {target, tline} = ghostTarget(lines, ln);
-  if(!target) return clear();
+  const targets = ghostTargets(lines, ln);
+  if(!targets.length) return clear();
   // Esc means no for this line — stay quiet however much they type;
   // Tab can always ask again
-  if(!forceGhost && ghostDismissed === ln + '|' + target) return clear();
-  if(!(target in ghostCache)){
-    await loadGhostCands(target);
+  if(!forceGhost && ghostDismissed === ln + '|' + targets[0].target) return clear();
+  const missing = targets.filter(t=>!(t.target in ghostCache));
+  if(missing.length){
+    await Promise.all(missing.map(t=>loadGhostCands(t.target)));
     return computeGhost();  // the caret may have moved while we fetched
   }
-  const cands = ghostCache[target];
-  if(cands === null) return;  // in flight elsewhere — hold, don't flicker
-  if(!cands.length) return clear();
+  if(targets.some(t=>ghostCache[t.target] === null)) return;  // in flight — hold
   const cur = lastWordOf(line);
-  if(cur && (cur === target || cands.some(c=>c.word === cur))) return clear();  // already lands
-  // the pad's own analysis is the real judge of "landed": if this
-  // line's ending already shares a rhyme family with the target's,
-  // the ghost's work is done — even for rhymes past the list cutoff
-  if(cur && tline >= 0 && analysis
-     && analysis.lines[ln] === lines[ln] && analysis.lines[tline] === lines[tline]){
+  // already lands? the pad's own analysis is the judge: an ending that
+  // joined any end-rhyme family means the ghost's work is done
+  if(cur && targets.some(t=>t.target === cur)) return clear();
+  const fresh = l => analysis && analysis.lines[l] === lines[l];
+  if(cur && fresh(ln)){
     const endG = l => {
       let g = null;
       analysis.tokens.forEach(t=>{ if(t.l === l && !t.ph && t.end) g = t.g; });
       return g;
     };
-    const g1 = endG(ln), g2 = endG(tline);
-    if(g1 !== null && g1 === g2) return clear();
+    const g1 = endG(ln);
+    if(g1 !== null && targets.some(t=>fresh(t.tline) && endG(t.tline) === g1)) return clear();
   }
+  // merge the pools, nearest-need target first; first claim on a word wins
+  const seenW = new Set();
+  const cands = [];
+  targets.forEach((t, oi)=>{
+    (ghostCache[t.target] || []).forEach(c=>{
+      if(seenW.has(c.word) || c.word === t.target) return;
+      seenW.add(c.word);
+      cands.push({...c, o: oi, tline: t.tline, color: t.color});
+    });
+  });
+  if(!cands.length) return clear();
+  if(cur && cands.some(c=>c.word === cur)) return clear();  // already lands
   // a trailing fragment turns matching candidates into COMPLETIONS:
   // type "fi" and the ghost narrows to fire, inserting just the rest
   const partial = /[A-Za-z']$/.test(line) ? cur : null;
@@ -849,30 +880,28 @@ async function computeGhost(){
     return computeGhost();
   }
   const follows = (fkey && followsCache[fkey]) || {bi: new Set(), tri: new Set()};
-  // rank: completions of what's being typed lead, then the more draft
-  // words a candidate echoes the higher it sits, the bar breaks ties
-  // (when the meter is fresh), slant back-fills
-  const fresh = i => analysis && analysis.lines[i] === lines[i] && analysis.meter && analysis.meter[i];
-  let gap = 0;
-  if(tline >= 0 && fresh(tline) && fresh(ln))
-    gap = analysis.meter[tline].syl - analysis.meter[ln].syl;
+  // bar gaps, per target line (when the meter is fresh for both ends)
+  const meterFresh = i => fresh(i) && analysis.meter && analysis.meter[i];
+  const gaps = targets.map(t=>(t.tline >= 0 && meterFresh(t.tline) && meterFresh(ln))
+    ? analysis.meter[t.tline].syl - analysis.meter[ln].syl : 0);
   // a completion's typed vowels are already counted in this line's bar
   const pv = partial ? (partial.match(/[aeiouy]+/g) || []).length : 0;
-  // tier order is the product: completions of what's typed, then
-  // grammar (the slot's part of speech), then idiom-completers
-  // (trigram — sharp), then song echoes, then rhyme quality. The loose
-  // bigram only breaks ties BELOW rhyme quality — "the guy" must never
-  // beat a perfect rhyme ("the light").
+  // tier order is the product: completions of what's typed, grammar
+  // (the slot's part of speech), nearest need (open endings before
+  // family extensions), idiom-completers (trigram — sharp), then rhyme
+  // quality, then song echoes. The loose bigram only breaks ties BELOW
+  // rhyme quality — "the guy" must never beat a perfect rhyme.
   avail = avail.map((c, i)=>({c, i,
       p: c.comp ? 0 : 1,
       g: grammarTier(c, prevWord),
+      o: c.o,
       t: follows.tri.has(c.word.split(' ')[0]) ? 0 : 1,
       f: -(c.fitn || 0),
       n: c.near ? 1 : 0,
       b: follows.bi.has(c.word.split(' ')[0]) ? 0 : 1,
-      m: gap >= 1 ? Math.abs((c.comp ? c.syl - pv : c.syl) - gap) : 0}))
-    .sort((a, b)=>a.p - b.p || a.g - b.g || a.t - b.t || a.n - b.n || a.f - b.f
-                || a.b - b.b || a.m - b.m || a.i - b.i)
+      m: gaps[c.o] >= 1 ? Math.abs((c.comp ? c.syl - pv : c.syl) - gaps[c.o]) : 0}))
+    .sort((a, b)=>a.p - b.p || a.g - b.g || a.o - b.o || a.t - b.t || a.n - b.n
+                || a.f - b.f || a.b - b.b || a.m - b.m || a.i - b.i)
     .map(x=>x.c);
   avail = avail.slice(0, 8);
   // patience: a brand-new append ghost waits for a real pause — but a
@@ -895,7 +924,7 @@ async function computeGhost(){
       if(j > 0) sel = j;
     }
     ghost = {line: ln, base: line, text: avail[sel].word, cands: avail, sel,
-             target, partial, sig};
+             target: targets[0].target, partial, sig};
     render();
   }
 }
@@ -924,8 +953,10 @@ function openGhostMenu(){
     const it = document.createElement('div');
     it.className = 'gm-item' + (i === ghost.sel ? ' sel' : '') + (c.near ? ' near' : '');
     if(c.fit) it.title = `echoes \u201c${c.fit}\u201d in your draft`;
+    const dot = c.color != null
+      ? `<span class="gm-dot" style="background:var(--r${c.color})"></span>` : '';
     it.innerHTML = `<span>${esc(c.word)}${c.fit ? '<span class="gm-fit"> \u2726</span>' : ''}</span>` +
-      `<span class="gm-syl">${'\u00b7'.repeat(Math.min(c.syl, 6))}</span>`;
+      `<span class="gm-syl">${'\u00b7'.repeat(Math.min(c.syl, 6))}${dot}</span>`;
     it.addEventListener('mousedown', e=>e.preventDefault());  // keep editor focus
     it.addEventListener('click', ()=>acceptGhost(c.word));
     it.addEventListener('mouseenter', ()=>{ ghost.sel = i; ghost.text = c.word; render(); paintGhostMenu(); });
