@@ -798,6 +798,19 @@ async function computeGhost(){
   if(!cands.length) return clear();
   const cur = lastWordOf(line);
   if(cur && (cur === target || cands.some(c=>c.word === cur))) return clear();  // already lands
+  // the pad's own analysis is the real judge of "landed": if this
+  // line's ending already shares a rhyme family with the target's,
+  // the ghost's work is done — even for rhymes past the list cutoff
+  if(cur && tline >= 0 && analysis
+     && analysis.lines[ln] === lines[ln] && analysis.lines[tline] === lines[tline]){
+    const endG = l => {
+      let g = null;
+      analysis.tokens.forEach(t=>{ if(t.l === l && !t.ph && t.end) g = t.g; });
+      return g;
+    };
+    const g1 = endG(ln), g2 = endG(tline);
+    if(g1 !== null && g1 === g2) return clear();
+  }
   // a trailing fragment turns matching candidates into COMPLETIONS:
   // type "fi" and the ghost narrows to fire, inserting just the rest
   const partial = /[A-Za-z']$/.test(line) ? cur : null;
