@@ -669,6 +669,7 @@ editor.addEventListener('pointerdown', e=>{
 let ghost = null;            // {line, base, text}
 let ghostDismissed = '';     // line|base the writer waved off with Esc
 const ghostCache = {};       // target word -> ranked candidate list
+const knownWord = {};        // fragment -> is it a real word (zipf gate)
 const suggestToggle = document.getElementById('suggestToggle');
 suggestToggle.checked = localStorage.getItem('rhymepad.suggest') !== '0';
 suggestToggle.addEventListener('change', ()=>{
@@ -743,6 +744,18 @@ async function computeGhost(){
     .map(c=>({...c, comp: !!(partial && c.word.startsWith(partial)
                              && c.word.length > partial.length)}));
   if(!avail.length) return clear();
+  // a fragment nothing completes: only append after it if it's a real
+  // word — never bolt a suggestion onto half of one ("brai throw")
+  if(partial && !avail.some(c=>c.comp)){
+    if(!(partial in knownWord)){
+      try{
+        const d = await (await fetch(`/api/word?word=${encodeURIComponent(partial)}`)).json();
+        knownWord[partial] = !!d.known && (d.zipf || 0) >= 2.3;
+      }catch(e){ return; }
+      return computeGhost();  // the caret may have moved while we fetched
+    }
+    if(!knownWord[partial]) return clear();
+  }
   // rank: completions of what's being typed lead, then the more draft
   // words a candidate echoes the higher it sits, the bar breaks ties
   // (when the meter is fresh), slant back-fills
