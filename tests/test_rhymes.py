@@ -867,3 +867,13 @@ def test_neighbor_vowel_slant_thinking_dreaming():
     # but single-vowel slants don't get the merger: bit/beat stay apart
     res = analyze(Draft(text="the bit\nthe beat"))
     assert not res["tokens"]
+
+
+def test_ings_does_not_glue_to_ence():
+    # offerings shares AA-x with confidence/nonsense, but its velar
+    # '-ings' close is not their '-ence' close
+    text = ("In what my brain offerings up\n"
+            "It shouts with confidence\n"
+            "all this is, is nonsense")
+    fam = group_with(text, "confidence", "nonsense")
+    assert "offerings" not in fam

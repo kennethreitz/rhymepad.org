@@ -394,13 +394,19 @@ def _m2_key(seq: list[str]) -> str | None:
 
 
 def _final_coda_tag(pl: list[str]) -> str:
-    """Coda-class string after the LAST vowel ('.' for open)."""
+    """Coda-class string after the LAST vowel ('.' for open). NG stays
+    distinct here — '-ings' must not look like '-ence' — and a sibilant
+    that is part of a nasal cluster is structural, not inflection."""
     last = -1
     for i, p in enumerate(pl):
         if p[-1].isdigit():
             last = i
-    coda = "".join(_coda_class(DIGITS.sub("", p)) for p in pl[last + 1:])
-    if coda.endswith("S"):
+    parts = []
+    for p in pl[last + 1:]:
+        c = DIGITS.sub("", p)
+        parts.append("N" if c == "M" else "S" if c == "Z" else c)
+    coda = "".join(parts)
+    if coda.endswith("S") and (len(coda) < 2 or coda[-2] not in "NG"):
         coda = coda[:-1]  # trailing plural/3rd-person sibilant is transparent
     return coda or "."
 
