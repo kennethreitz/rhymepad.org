@@ -903,3 +903,11 @@ def test_alliteration_tight_pair():
     res2 = analyze(Draft(text="big boy moves on my mind"))
     al2 = {res2["lines"][a["l"]][a["s"]:a["e"]].lower() for a in res2["allit"]}
     assert "big" not in al2
+
+
+def test_stoptail_phrase_needs_coda_agreement():
+    # «affect and» (ND tail) must not ride especially's open EH-x — but
+    # poet / know it (T ~ T) still pairs
+    res = analyze(Draft(text="Seem flat in affect and simpler\n"
+                              "Especially on this evening"))
+    assert not res["tokens"]

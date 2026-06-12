@@ -1113,8 +1113,20 @@ def analyze_text(text: str) -> dict:
             clus[_f(i)].append(t)
         subsets = sorted(clus.values(), key=len, reverse=True)
         if phs:
+            # a phrase rides the main cluster only when its tail coda
+            # nests with a host word's — «know it» (T) rides poet (T),
+            # «affect and» (ND) does not ride especially (.) — or when
+            # the phrase itself ends open
+            def _ph_tag(p):
+                ph = phones_for(p["word"].split()[-1])
+                return _final_coda_tag(ph.split()) if ph else "."
             if subsets:
-                subsets[0].extend(phs)  # phrases ride the main cluster
+                host_tags = {_word_tag(t) for t in subsets[0]}
+                riders = [p for p in phs
+                          if _ph_tag(p) == "."
+                          or any(_coda_nest(_ph_tag(p), ht)
+                                 for ht in host_tags)]
+                subsets[0].extend(riders)
             else:
                 subsets = [phs]
         for sub in subsets:
