@@ -337,13 +337,13 @@ function startRap(){
   const plan = lines.map((l, k)=>{
     const syl = sylOf(l);
     const ideal = syl / SYL_PER_SEC;               // seconds at rate 1
-    let bars = 1, bestDist = Infinity;
+    // never sprint: take the smallest slot the line fits at natural
+    // rate; if even two bars would need speed-up, two bars it is and
+    // the rate cap absorbs the rest
+    let bars = 2;
     for(const b of [1, 2]){
       const usable = b * barSec * 7 / 8;           // the breath is real time
-      const r = ideal / usable;
-      // overspeed is penalized: when torn, rap leans back, never sprints
-      const d = Math.abs(Math.log(r)) * (r > 1 ? 1.35 : 1);
-      if(d < bestDist){ bestDist = d; bars = b; }
+      if(ideal <= usable * 1.02){ bars = b; break; }
     }
     const at = t;
     t += bars * barSec;
@@ -439,7 +439,7 @@ function startRap(){
       const isLast = j === cs.length - 1;
       const share = usable * ch.w / wtotal;
       const at = p.at + Math.round(off / GRID) * GRID;  // lock to the 8th grid
-      const rate = Math.min(1.3, Math.max(0.7,
+      const rate = Math.min(1.1, Math.max(0.7,
         chSylRate(p.syl, ch.w, wtotal, share) * (lastLine ? 0.9 : 1)));
       // declination: punch the bar's entry, settle chunk by chunk into
       // the cadence — the natural downhill of a spoken line
@@ -450,7 +450,7 @@ function startRap(){
       // the hype man answers with the line's (parenthetical) — in the
       // gap after the main vocal, or owning the slot on a full-paren line
       if(ch.c.hype)
-        say(ch.c.hype, ch.c.text ? at + share * 0.85 : at, 1.05, 0.85,
+        say(ch.c.hype, ch.c.text ? at + share * 0.85 : at, 1, 0.85,
             null, null, 0.75, hype);
       off += share;
     });
