@@ -663,6 +663,15 @@ def test_continuations_read_like_language():
     assert follows(prev="WILL ")["words"] == nx["will"]
 
 
+def test_suggest_carries_pos_capability_flags():
+    # the client keeps grammar with these: after "the" the slot wants
+    # n/a, so verb-only candidates ("ignite") must be sinkable
+    r = rhymes.suggest_data("flight", "ready for the ")
+    pos = {d["word"]: d.get("pos", "") for d in r["words"]}
+    assert "v" in pos["ignite"] and "n" not in pos["ignite"]
+    assert "n" in pos["light"]
+
+
 def test_suggest_multis_are_ghost_ready():
     r = rhymes.suggest_data("paper", "a draft about nothing much")
     assert r["multis"] and all(

@@ -2205,10 +2205,26 @@ def suggest_data(word: str, text: str, limit: int = 60):
             return None, 0
         return min(vias, key=lambda v: ctx_rank[v]), len(vias)
 
+    pos_flag = {"noun": "n", "verb": "v", "adj": "a", "adv": "r"}
+    defs = get_definitions()
+
+    def pos_of(w):
+        """Compact POS capability flags ("nv") — what slots w can fill."""
+        ps = set()
+        for ent in (defs.get(w), defs.get(lemma_base(w))):
+            for p, _ in (ent or {}).get("d", []):
+                if p in pos_flag:
+                    ps.add(pos_flag[p])
+        return "".join(sorted(ps))
+
     def annotate(d):
         via, n = fit_of(d["word"].split()[-1])
         if via:
             d["fit"], d["fitn"] = via, n
+        # the slot is filled by the candidate's FIRST word
+        p = pos_of(d["word"].split()[0])
+        if p:
+            d["pos"] = p
         return d
 
     for lst in (base["words"], base["near"]):

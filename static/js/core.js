@@ -572,14 +572,16 @@ const LEGENDS = {
     a cadence family. Scan the dots to see where your bars match.</p>`,
   suggestToggle: `
     <h4>Suggest</h4>
-    <p>Pause at the end of the line you're writing and a quiet ghost
-    offers a landing word that answers the stanza's open ending —
-    and knows your song: words that echo what you're writing about lead
-    the list, marked <b style="color:var(--accent)">✦</b>. Start typing
-    a word and the ghost narrows to completions of it.</p>
-    <p><kbd>Tab</kbd> opens the candidates — syllable dots show which
-    fits the bar, <b>~</b> marks slant — <kbd>Enter</kbd> lands it,
-    <kbd>Esc</kbd> waves it off. It never types for you; it only
+    <p>Pause at the end of the line you're writing — a real pause, it
+    won't interrupt a breath between words — and a quiet ghost offers a
+    landing word that answers the stanza's open ending. It knows your
+    song: words that echo what you're writing about lead, marked
+    <b style="color:var(--accent)">✦</b>, and it keeps the grammar of
+    your line. Start typing a word and it narrows to completions.</p>
+    <p><kbd>Tab</kbd> opens the candidates (or summons the ghost when
+    there isn't one) — syllable dots show which fits the bar, <b>~</b>
+    marks slant. <kbd>Enter</kbd> lands it. <kbd>Esc</kbd> means no for
+    this line, and it listens. It never types for you; it only
     offers.</p>`,
   exploreToggle: `
     <h4>Explore</h4>
@@ -718,7 +720,7 @@ async function loadGhostCands(target){
       body: JSON.stringify({word: target, text: editor.value})});
     const d = await r.json();
     const shape = (w, near, multi)=>({word: w.word.toLowerCase(), syl: w.syl || 1,
-      z: w.z || 0, fit: w.fit || null, fitn: w.fitn || 0, near, multi});
+      z: w.z || 0, fit: w.fit || null, fitn: w.fitn || 0, pos: w.pos || '', near, multi});
     ghostCache[target] = (d.words || []).map(w=>shape(w, false, false))
       .concat(((d.multis || []).filter(w=>w.word)).map(w=>shape(w, false, true)))
       .concat((d.near || []).map(w=>shape(w, true, false)));
@@ -743,6 +745,25 @@ async function loadFollows(key, prev, prev2){
 const SHORT_OK = new Set(('a i ah an am as be by do go ha he hi if in is it ma me ' +
   'my no of oh on or so to uh up us we ya yo').split(' '));
 
+// grammar: after a determiner the slot wants a noun/adjective; after a
+// modal or "to" it wants a verb. Never offer "ready for the ignite".
+const DET_PREV = new Set(('the a an my your his her its our their this that these ' +
+  'those some no every each another').split(' '));
+const VERB_PREV = new Set(("to will would can could should must might shall don't " +
+  "doesn't didn't won't can't couldn't wouldn't shouldn't gonna wanna gotta lemme").split(' '));
+function grammarTier(c, prev){
+  if(!prev) return 0;
+  const pos = c.pos || '';
+  if(DET_PREV.has(prev)) return !pos ? 1 : (/[na]/.test(pos) ? 0 : 2);
+  if(VERB_PREV.has(prev)) return !pos ? 1 : (pos.includes('v') ? 0 : 2);
+  return 0;
+}
+
+let lastType = 0;        // when the writer last touched a key
+let forceGhost = false;  // Tab asked for the ghost explicitly
+let idleTimer = null;
+const GHOST_IDLE = 800;  // a real pause, not a breath between words
+
 async function computeGhost(){
   const clear = ()=>{ if(ghost){ ghost = null; closeGhostMenu(); render(); } };
   if(!suggestToggle.checked || !rhymeToggle.checked || editor.readOnly) return clear();
@@ -757,9 +778,11 @@ async function computeGhost(){
     if(t.target) loadGhostCands(t.target);
     return clear();
   }
-  if(ghostDismissed === ln + '|' + line) return clear();
   const {target, tline} = ghostTarget(lines, ln);
   if(!target) return clear();
+  // Esc means no for this line — stay quiet however much they type;
+  // Tab can always ask again
+  if(!forceGhost && ghostDismissed === ln + '|' + target) return clear();
   if(!(target in ghostCache)){
     await loadGhostCands(target);
     return computeGhost();  // the caret may have moved while we fetched
@@ -816,24 +839,43 @@ async function computeGhost(){
   // a completion's typed vowels are already counted in this line's bar
   const pv = partial ? (partial.match(/[aeiouy]+/g) || []).length : 0;
   // tier order is the product: completions of what's typed, then
-  // idiom-completers (trigram — sharp), then song echoes, then rhyme
-  // quality. The loose bigram only breaks ties BELOW rhyme quality —
-  // "the guy" must never beat a perfect rhyme ("the light").
+  // grammar (the slot's part of speech), then idiom-completers
+  // (trigram — sharp), then song echoes, then rhyme quality. The loose
+  // bigram only breaks ties BELOW rhyme quality — "the guy" must never
+  // beat a perfect rhyme ("the light").
   avail = avail.map((c, i)=>({c, i,
       p: c.comp ? 0 : 1,
+      g: grammarTier(c, prevWord),
       t: follows.tri.has(c.word.split(' ')[0]) ? 0 : 1,
       f: -(c.fitn || 0),
       n: c.near ? 1 : 0,
       b: follows.bi.has(c.word.split(' ')[0]) ? 0 : 1,
       m: gap >= 1 ? Math.abs((c.comp ? c.syl - pv : c.syl) - gap) : 0}))
-    .sort((a, b)=>a.p - b.p || a.t - b.t || a.f - b.f || a.n - b.n
+    .sort((a, b)=>a.p - b.p || a.g - b.g || a.t - b.t || a.f - b.f || a.n - b.n
                 || a.b - b.b || a.m - b.m || a.i - b.i)
     .map(x=>x.c);
   avail = avail.slice(0, 8);
+  // patience: a brand-new append ghost waits for a real pause — but a
+  // completion of what's mid-keystroke helps NOW, and Tab means now
+  if(!avail[0].comp && !ghost && !forceGhost){
+    const wait = GHOST_IDLE - (Date.now() - lastType);
+    if(wait > 0){
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(computeGhost, wait + 20);
+      return;
+    }
+  }
   const sig = avail.map(c=>c.word + (c.comp ? '+' : '')).join();
   if(!ghost || ghost.line !== ln || ghost.base !== line || ghost.sig !== sig){
-    ghost = {line: ln, base: line, text: avail[0].word, cands: avail, sel: 0,
-             partial, sig};
+    // steady hands: if the word we're already showing is still a live
+    // candidate, keep showing it — don't fidget over rank shuffles
+    let sel = 0;
+    if(ghost && ghost.line === ln && ghost.text){
+      const j = avail.findIndex(c=>c.word === ghost.text);
+      if(j > 0) sel = j;
+    }
+    ghost = {line: ln, base: line, text: avail[sel].word, cands: avail, sel,
+             target, partial, sig};
     render();
   }
 }
@@ -916,12 +958,24 @@ editor.addEventListener('keydown', e=>{
       return;
     }
   }
+  if(e.key === 'Tab' && !ghost && suggestToggle.checked && !editor.readOnly){
+    // no ghost on screen? Tab asks for one — consent works both ways
+    const {ln, col} = caretLineCol();
+    const line = editor.value.split('\n')[ln] || '';
+    if(col === line.length && line.trim() && !/^\s*[#\[]/.test(line)){
+      e.preventDefault();
+      ghostDismissed = '';
+      forceGhost = true;
+      computeGhost().then(()=>{ forceGhost = false; if(ghost) openGhostMenu(); });
+      return;
+    }
+  }
   if(e.key === 'Escape' && ghost){
-    const lines2 = editor.value.split('\n');
-    ghostDismissed = ghost.line + '|' + lines2[ghost.line];
+    ghostDismissed = ghost.line + '|' + (ghost.target || '');
     ghost = null; render();
   }
 });
+editor.addEventListener('input', ()=>{ lastType = Date.now(); });
 editor.addEventListener('scroll', closeGhostMenu);
 editor.addEventListener('blur', ()=>setTimeout(closeGhostMenu, 150));
 
