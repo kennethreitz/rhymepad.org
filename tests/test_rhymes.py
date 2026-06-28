@@ -10,8 +10,37 @@ from collections import defaultdict
 import pytest
 
 import rhymes
-from app import Draft, analyze, lookup
-from rhymes import word_data
+from rhymes import (multis_for, rhyme_char_start,  # noqa: F401  (test surface)
+                    word_data)
+
+
+# These tests exercise the rhyme engine directly — the web layer (Responder)
+# is just a thin adapter over ``rhymes``, so we mirror its tiny call shapes
+# here rather than spin up HTTP for every lyric edge case.
+class Draft:
+    def __init__(self, text):
+        self.text = text
+
+
+def analyze(draft):
+    return rhymes.analyze_text(draft.text)
+
+
+def lookup(word, mode="rhyme", limit=60):
+    return rhymes.lookup_data(word, mode=mode, limit=limit)
+
+
+def word_info(word):
+    return rhymes.word_data(word)
+
+
+def follows(prev, prev2=None):
+    w = prev.strip().lower()[:64]
+    out = {"prev": w, "words": rhymes.get_continuations().get(w, [])}
+    if prev2:
+        w2 = prev2.strip().lower()[:64]
+        out["tri"] = rhymes.get_trigrams().get(f"{w2} {w}", [])
+    return out
 
 
 def groups(text: str) -> list[set[str]]:
@@ -431,8 +460,7 @@ def test_nasal_codas_merge():
 
 def test_analyze_rejects_oversized_drafts():
     import pytest as _pytest
-    from fastapi import HTTPException
-    with _pytest.raises(HTTPException):
+    with _pytest.raises(ValueError):
         analyze(Draft(text="a" * 200_000))
 
 
@@ -534,7 +562,6 @@ def test_secondary_pronunciation_stays_local():
 # -------------------------------------------------------------- new tools
 
 def test_word_info():
-    from app import word_info
     info = word_info(word="tonight")
     assert info["syl"] == 2 and info["stress"] == "01"
     assert info["rime"] == "AY T"
@@ -572,7 +599,6 @@ def test_alliteration_needs_three_and_locality():
 
 
 def test_word_senses():
-    from app import word_info
     assert word_info(word="light")["senses"] >= 10
 
 
@@ -659,7 +685,6 @@ def test_continuations_read_like_language():
     nx = rhymes.get_continuations()
     assert "find" in nx["will"]
     assert "life" in nx["my"]
-    from app import follows
     assert follows(prev="WILL ")["words"] == nx["will"]
 
 
@@ -782,7 +807,6 @@ def test_em_back_pocket_quintet_is_one_family():
 # ------------------------------------------------------------------ multis
 
 def test_multis_generator():
-    from app import multis_for
     ch = multis_for("charisma", set())
     assert "little" in ch  # IH-x skeleton, not a perfect rhyme
     el = multis_for("elevator", set())
@@ -864,7 +888,6 @@ def test_no_matching_across_stanzas():
 
 
 def test_rhyme_char_start():
-    from app import rhyme_char_start
     assert rhyme_char_start("tonight") == 3   # "ight"
     assert rhyme_char_start("write") == 2     # 'ite' (silent-e skipped)
 

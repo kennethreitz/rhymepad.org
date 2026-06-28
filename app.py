@@ -1,8 +1,8 @@
 """RhymePad — the web app. The rhyme engine itself lives in ``rhymes``
-(framework-free); this module is the FastAPI shell around it: routes,
+(framework-free); this module is the Responder shell around it: routes,
 shared-draft link previews, and static serving.
 
-Run it:  uv run uvicorn app:app --reload
+Run it:  uv run granian --interface asgi --reload app:api
 """
 
 import base64
@@ -11,92 +11,90 @@ import io
 import json
 import re
 from collections import defaultdict
-from contextlib import asynccontextmanager
 from functools import lru_cache
 from html import escape
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException, Response
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+import responder
 from wordfreq import zipf_frequency
 
 import rhymes
 from rhymes import (lookup_data, multis_for,  # noqa: F401  (test surface)
                     rhyme_char_start, word_data)
 
+# static lives at the site root (``/js/core.js``, ``/manifest.webmanifest``,
+# ``/og.png``) — the explicit routes below resolve first, the static mount
+# catches everything else. No sessions, so the secure-by-default key is moot.
+api = responder.API(title="RhymePad", static_dir="static", static_route="",
+                    sessions=False)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+
+@api.on_event("startup")
+def warm():
     # warm the slow lazy bits at boot, not on the first keystroke
     rhymes.warm()
-    yield
 
 
-app = FastAPI(title="RhymePad", lifespan=lifespan)
+@api.route("/healthz")
+def healthz(req, resp):
+    resp.media = {"ok": True}
 
 
-class Draft(BaseModel):
-    text: str
-
-
-@app.get("/healthz")
-def healthz():
-    return {"ok": True}
-
-
-@app.post("/api/analyze")
-def analyze(draft: Draft):
+@api.route("/api/analyze", methods=["POST"])
+def analyze(req, resp):
+    draft = req.media_sync()
     try:
-        return rhymes.analyze_text(draft.text)
+        resp.media = rhymes.analyze_text(draft.get("text", ""))
     except ValueError:
-        raise HTTPException(413, "draft too large")
+        resp.status_code = 413
+        resp.media = {"detail": "draft too large"}
 
 
-@app.get("/api/word")
-def word_info(word: str):
+@api.route("/api/word")
+def word_info(req, resp):
     """Phonetic anatomy of a word — or a phrase, read straight through."""
-    return rhymes.word_data(word)
+    resp.media = rhymes.word_data(req.params.get("word", ""))
 
 
-@app.get("/api/zipf")
-def word_zipf(word: str):
+@api.route("/api/zipf")
+def word_zipf(req, resp):
     """Frequency only — no phonetics, no g2p. The ghost's mid-word gate
     needs an instant answer, not a 400ms neural pronunciation."""
-    w = word.strip().lower()[:64]
-    return {"word": w, "zipf": round(zipf_frequency(w, "en"), 2)}
+    w = req.params.get("word", "").strip().lower()[:64]
+    resp.media = {"word": w, "zipf": round(zipf_frequency(w, "en"), 2)}
 
 
-@app.get("/api/lookup")
-def lookup(word: str, mode: str = "rhyme", limit: int = 60):
-    return rhymes.lookup_data(word, mode=mode, limit=limit)
+@api.route("/api/lookup")
+def lookup(req, resp):
+    word = req.params.get("word", "")
+    mode = req.params.get("mode", "rhyme")
+    limit = int(req.params.get("limit", "60"))
+    resp.media = rhymes.lookup_data(word, mode=mode, limit=limit)
 
 
-class SuggestReq(BaseModel):
-    word: str
-    text: str
-
-
-@app.post("/api/suggest")
-def suggest(req: SuggestReq):
+@api.route("/api/suggest", methods=["POST"])
+def suggest(req, resp):
     """Rhymes for a word, draft-aware: candidates that echo what the
     draft is about lead the list."""
-    return rhymes.suggest_data(req.word, req.text[:rhymes.MAX_DRAFT])
+    body = req.media_sync()
+    resp.media = rhymes.suggest_data(body.get("word", ""),
+                                     body.get("text", "")[:rhymes.MAX_DRAFT])
 
 
-@app.get("/api/follows")
-def follows(prev: str, prev2: str | None = None):
+@api.route("/api/follows")
+def follows(req, resp):
     """Words that commonly come right after `prev` (and after the
     two-word context `prev2 prev` when known) — phrase fuel for the
     ghost's ranking. The trigram sees idioms the bigram can't:
     "from time to _time_", not "to _my_"."""
-    w = prev.strip().lower()[:64]
+    w = req.params.get("prev", "").strip().lower()[:64]
     out = {"prev": w, "words": rhymes.get_continuations().get(w, [])}
+    prev2 = req.params.get("prev2")
     if prev2:
         w2 = prev2.strip().lower()[:64]
         out["tri"] = rhymes.get_trigrams().get(f"{w2} {w}", [])
-    return out
+    resp.media = out
 
 OG_PALETTE = ["#e8814a", "#4ea3e8", "#6fd08c", "#d46fb8",
               "#e8c54a", "#9b7ce8", "#e85a5a", "#46cabf",
@@ -230,22 +228,26 @@ def _render_og(d: str) -> bytes:
     return out.getvalue()
 
 
-@app.get("/api/og", include_in_schema=False)
-def og_card(d: str) -> Response:
+@api.route("/api/og", include_in_schema=False)
+def og_card(req, resp):
     try:
-        png = _render_og(d)
+        png = _render_og(req.params.get("d", ""))
     except Exception:
-        raise HTTPException(404, "bad draft link")
-    return Response(png, media_type="image/png",
-                    headers={"Cache-Control": "public, max-age=31536000, immutable"})
+        resp.status_code = 404
+        resp.text = "bad draft link"
+        return
+    resp.content = png
+    resp.mimetype = "image/png"
+    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
 
 
 INDEX_HTML = (Path(__file__).parent / "static" / "index.html")
 
 
-@app.get("/", include_in_schema=False)
-def index(d: str | None = None) -> Response:
+@api.route("/", include_in_schema=False)
+def index(req, resp):
     html = INDEX_HTML.read_text()
+    d = req.params.get("d")
     if d:
         try:
             obj = _decode_d(d)
@@ -276,26 +278,21 @@ def index(d: str | None = None) -> Response:
             html = re.sub(r'(property="og:url" content=")[^"]*', r"\g<1>" + url, html)
         except Exception:
             pass
-    return Response(html, media_type="text/html")
+    resp.html = html
 
 
-@app.get("/robots.txt", include_in_schema=False)
-def robots() -> Response:
-    body = ("User-agent: *\n"
-            "Allow: /\n"
-            "Sitemap: https://rhymepad.org/sitemap.xml\n")
-    return Response(body, media_type="text/plain")
+@api.route("/robots.txt", include_in_schema=False)
+def robots(req, resp):
+    resp.text = ("User-agent: *\n"
+                 "Allow: /\n"
+                 "Sitemap: https://rhymepad.org/sitemap.xml\n")
 
 
-@app.get("/sitemap.xml", include_in_schema=False)
-def sitemap() -> Response:
-    body = ('<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-            '  <url><loc>https://rhymepad.org/</loc>'
-            '<changefreq>weekly</changefreq><priority>1.0</priority></url>\n'
-            '</urlset>\n')
-    return Response(body, media_type="application/xml")
-
-
-app.mount("/", StaticFiles(directory=Path(__file__).parent / "static",
-                           html=True), name="static")
+@api.route("/sitemap.xml", include_in_schema=False)
+def sitemap(req, resp):
+    resp.content = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+                    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+                    '  <url><loc>https://rhymepad.org/</loc>'
+                    '<changefreq>weekly</changefreq><priority>1.0</priority></url>\n'
+                    '</urlset>\n').encode("utf-8")
+    resp.mimetype = "application/xml"

@@ -15,12 +15,12 @@ Classifier: Topic :: Text Processing :: Linguistic
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
 License-File: LICENSE
-Requires-Dist: fastapi>=0.110
-Requires-Dist: uvicorn>=0.29
+Requires-Dist: responder>=5.0.0
 Requires-Dist: pronouncing>=0.2
 Requires-Dist: wordfreq>=3.0
 Requires-Dist: g2p-en>=2.1.0
 Requires-Dist: pillow>=12.2.0
+Requires-Dist: granian[reload]>=2.7.7
 Dynamic: license-file
 
 # RhymePad
