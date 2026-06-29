@@ -15,12 +15,11 @@ Classifier: Topic :: Text Processing :: Linguistic
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
 License-File: LICENSE
-Requires-Dist: responder>=6.3.0
+Requires-Dist: responder[server]>=7.0.0
 Requires-Dist: pronouncing>=0.2
 Requires-Dist: wordfreq>=3.0
 Requires-Dist: g2p-en>=2.1.0
 Requires-Dist: pillow>=12.2.0
-Requires-Dist: granian[reload]>=2.7.7
 Dynamic: license-file
 
 # RhymePad
@@ -39,7 +38,7 @@ Live at <https://rhymepad.org>.
 ## Run
 
 ```console
-$ uv run uvicorn app:app --reload
+$ uv run granian --interface asgi --reload app:api
 ```
 
 Then open <http://127.0.0.1:8000>.
@@ -102,7 +101,7 @@ rhymes.lookup_data("light", mode="rhyme")   # ranked rhymes
 rhymes.word_data("orange")                  # phonetic anatomy
 ```
 
-`app.py` is just the FastAPI shell around it.
+`app.py` is just the Responder shell around it.
 
 There's a CLI too:
 

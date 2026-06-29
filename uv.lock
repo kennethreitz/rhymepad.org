@@ -246,11 +246,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c5/77/9bd9ee707c8a0e162b1368aff834b66d7914e8b1a9b325ee59e7046864ae/granian-2.7.7-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:2d85fa4de3448baa6ce021d72f1508b2e8af0e0d58c9f9f3f9d0170f6093df93", size = 4060580, upload-time = "2026-06-23T11:10:26.147Z" },
 ]
 
-[package.optional-dependencies]
-reload = [
-    { name = "watchfiles" },
-]
-
 [[package]]
 name = "h11"
 version = "0.16.0"
@@ -1108,7 +1103,7 @@ wheels = [
 
 [[package]]
 name = "responder"
-version = "6.3.0"
+version = "7.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "a2wsgi" },
@@ -1122,9 +1117,14 @@ dependencies = [
     { name = "starlette", extra = ["full"] },
     { name = "uvicorn", extra = ["standard"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4e/e3/22eb5e85149f7cdb1b8004c7537c0dd460a5d58a88df178343426c1a4471/responder-6.3.0.tar.gz", hash = "sha256:fc7414759551f86d1eb71a7278653314818953d57039cb5e356bf6ea88101441", size = 145886, upload-time = "2026-06-29T05:43:21.448Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1d/69/0fc84b6cdf07cb1135976a0d4fe0f3c1aa06ba1243e815b9066c665f5f42/responder-7.0.0.tar.gz", hash = "sha256:a3028cc8d9fd2afdb87a81d9d12f3c81d5b802ed405dc64145efa700862b23e7", size = 173579, upload-time = "2026-06-29T18:52:12.134Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/56/575c523869ca66df8a1760aec89a27ce0e5e3a9fb829243d1bcc29ea2902/responder-6.3.0-py3-none-any.whl", hash = "sha256:8cc6b7b66f7ce56d69b4fd1712bf6f36fe3f8dcf93ba7bb786b4ec12da7557c7", size = 100841, upload-time = "2026-06-29T05:43:20.313Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/47/55f2203d6c6787d78fe4f29b082b782ec2b4afbc52375ad09475db5a11a8/responder-7.0.0-py3-none-any.whl", hash = "sha256:00e1281a4f7a7e4ef84cccaba600805b15e902d435f1f0d9f50771410a30c7b1", size = 120063, upload-time = "2026-06-29T18:52:10.803Z" },
+]
+
+[package.optional-dependencies]
+server = [
+    { name = "granian" },
 ]
 
 [[package]]
@@ -1133,10 +1133,9 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "g2p-en" },
-    { name = "granian", extra = ["reload"] },
     { name = "pillow" },
     { name = "pronouncing" },
-    { name = "responder" },
+    { name = "responder", extra = ["server"] },
     { name = "wordfreq" },
 ]
 
@@ -1148,10 +1147,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "g2p-en", specifier = ">=2.1.0" },
-    { name = "granian", extras = ["reload"], specifier = ">=2.7.7" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "pronouncing", specifier = ">=0.2" },
-    { name = "responder", specifier = ">=6.3.0" },
+    { name = "responder", extras = ["server"], specifier = ">=7.0.0" },
     { name = "wordfreq", specifier = ">=3.0" },
 ]
 

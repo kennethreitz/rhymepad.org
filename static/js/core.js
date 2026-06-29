@@ -502,7 +502,7 @@ function buildReadout(){
   // the stats bar is gone — this element only ever speaks up when the
   // engine is unreachable (and hosts the transient "saved" flash)
   schemeReadout.innerHTML = backendOk ? ''
-    : '<span class="offline">backend offline — run: uv run uvicorn app:app</span>';
+    : '<span class="offline">backend offline — run: uv run granian --interface asgi app:api</span>';
 }
 
 const sampleChip = document.getElementById('sampleChip');

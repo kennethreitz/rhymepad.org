@@ -24,12 +24,24 @@ import rhymes
 from rhymes import (lookup_data, multis_for,  # noqa: F401  (test surface)
                     rhyme_char_start, word_data)
 
-# static lives at the site root (``/js/core.js``, ``/manifest.webmanifest``,
+# Static lives at the site root (``/js/core.js``, ``/manifest.webmanifest``,
 # ``/og.png``) — the explicit routes below resolve first, the static mount
 # catches everything else. No sessions, so the secure-by-default key is moot.
-# ``/healthz`` is served by the health-check registry below.
-api = responder.API(title="RhymePad", static_dir="static", static_route="",
-                    sessions=False, health_route="/healthz")
+# Responder 7 handles framework errors as Problem Details by default; keep that
+# contract explicit because the frontend API endpoints are JSON-first.
+MAX_REQUEST_BODY = 1024 * 1024
+api = responder.API(
+    title="RhymePad",
+    static_dir="static",
+    static_route="",
+    sessions=False,
+    health_route="/healthz",
+    security_headers=True,
+    request_id=True,
+    auto_etag=True,
+    max_request_size=MAX_REQUEST_BODY,
+    problem_details=True,
+)
 
 # the rhyme engine answers nonsense until its lazy indexes are built; gate
 # readiness on that so the load balancer holds traffic through the warm.

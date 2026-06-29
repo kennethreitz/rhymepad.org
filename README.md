@@ -14,7 +14,7 @@ Live at <https://rhymepad.org>.
 ## Run
 
 ```console
-$ uv run uvicorn app:app --reload
+$ uv run granian --interface asgi --reload app:api
 ```
 
 Then open <http://127.0.0.1:8000>.
@@ -77,7 +77,7 @@ rhymes.lookup_data("light", mode="rhyme")   # ranked rhymes
 rhymes.word_data("orange")                  # phonetic anatomy
 ```
 
-`app.py` is just the FastAPI shell around it.
+`app.py` is just the Responder shell around it.
 
 There's a CLI too:
 
