@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import responder
+from responder import Query
 from wordfreq import zipf_frequency
 
 import rhymes
@@ -26,19 +27,26 @@ from rhymes import (lookup_data, multis_for,  # noqa: F401  (test surface)
 # static lives at the site root (``/js/core.js``, ``/manifest.webmanifest``,
 # ``/og.png``) — the explicit routes below resolve first, the static mount
 # catches everything else. No sessions, so the secure-by-default key is moot.
+# ``/healthz`` is served by the health-check registry below.
 api = responder.API(title="RhymePad", static_dir="static", static_route="",
-                    sessions=False)
+                    sessions=False, health_route="/healthz")
+
+# the rhyme engine answers nonsense until its lazy indexes are built; gate
+# readiness on that so the load balancer holds traffic through the warm.
+_warmed = False
 
 
 @api.on_event("startup")
 def warm():
     # warm the slow lazy bits at boot, not on the first keystroke
+    global _warmed
     rhymes.warm()
+    _warmed = True
 
 
-@api.route("/healthz")
-def healthz(req, resp):
-    resp.media = {"ok": True}
+# 503 until warm() finishes, 200 after — a real readiness signal, not a
+# constant {"ok": true}.
+api.add_health_check("engine_warm", lambda: _warmed)
 
 
 @api.route("/api/analyze", methods=["POST"])
@@ -66,10 +74,10 @@ def word_zipf(req, resp):
 
 
 @api.route("/api/lookup")
-def lookup(req, resp):
-    word = req.params.get("word", "")
-    mode = req.params.get("mode", "rhyme")
-    limit = int(req.params.get("limit", "60"))
+def lookup(req, resp, *, word: str = Query(""), mode: str = Query("rhyme"),
+           limit: int = Query(60)):
+    # typed markers coerce + validate: a non-int ``limit`` is a 422, not the
+    # 500 that ``int(...)`` used to raise.
     resp.media = rhymes.lookup_data(word, mode=mode, limit=limit)
 
 
