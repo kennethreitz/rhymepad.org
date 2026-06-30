@@ -5,7 +5,7 @@ description = "A scratchpad for poets & rappers — phoneme-aware rhyme-scheme d
 readme = "README.md"
 license = "ISC"
 authors = [{ name = "Kenneth Reitz", email = "me@kennethreitz.org" }]
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 keywords = ["rhyme", "lyrics", "poetry", "rap", "phonetics", "cmudict"]
 classifiers = [
     "Development Status :: 4 - Beta",

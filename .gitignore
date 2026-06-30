@@ -4,3 +4,6 @@ __pycache__/
 .DS_Store
 dist
 build/
+
+# Makefile stamp for downloaded NLTK data
+.nltk-data.stamp
