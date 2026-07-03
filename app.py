@@ -11,90 +11,109 @@ import io
 import json
 import re
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from html import escape
 from pathlib import Path
 from urllib.parse import quote
 
 import responder
+from responder import Query
+from responder.ext.ratelimit import RateLimiter
 from wordfreq import zipf_frequency
 
 import rhymes
 from rhymes import (lookup_data, multis_for,  # noqa: F401  (test surface)
                     rhyme_char_start, word_data)
 
+
+@asynccontextmanager
+async def lifespan(app):
+    # warm the slow lazy bits at boot, not on the first keystroke
+    rhymes.warm()
+    yield
+
+
 # static lives at the site root (``/js/core.js``, ``/manifest.webmanifest``,
 # ``/og.png``) — the explicit routes below resolve first, the static mount
 # catches everything else. No sessions, so the secure-by-default key is moot.
+# The body cap covers a MAX_DRAFT draft as JSON (escaping can double it);
+# the timeout is sized for g2p on a draft full of words the dictionary
+# doesn't know, not for the happy path.
 api = responder.API(title="RhymePad", static_dir="static", static_route="",
-                    sessions=False)
+                    sessions=False, lifespan=lifespan,
+                    security_headers=True, auto_etag=True,
+                    max_request_size=512_000, request_timeout=60)
 
-
-@api.on_event("startup")
-def warm():
-    # warm the slow lazy bits at boot, not on the first keystroke
-    rhymes.warm()
+# trust_proxy_headers: the container only ever sees the ingress IP —
+# per-client keying has to come from X-Forwarded-For.
+# og renders a PIL card per unique payload, so it gets a hard cap; the
+# editor endpoints share a backstop no human typing session can reach.
+# check() is called in-handler rather than via @limiter.limit: the
+# decorator drops the handler's return value, and these handlers return.
+og_limiter = RateLimiter(requests=30, period=60, trust_proxy_headers=True)
+edit_limiter = RateLimiter(requests=600, period=60, trust_proxy_headers=True)
 
 
 @api.route("/healthz")
 def healthz(req, resp):
-    resp.media = {"ok": True}
+    return {"ok": True}
 
 
 @api.route("/api/analyze", methods=["POST"])
 def analyze(req, resp):
+    if not edit_limiter.check(req, resp):
+        return
     draft = req.media_sync()
     try:
-        resp.media = rhymes.analyze_text(draft.get("text", ""))
+        return rhymes.analyze_text(draft.get("text", ""))
     except ValueError:
-        resp.status_code = 413
-        resp.media = {"detail": "draft too large"}
+        return {"detail": "draft too large"}, 413
 
 
 @api.route("/api/word")
-def word_info(req, resp):
+def word_info(req, resp, *, word: str = Query("")):
     """Phonetic anatomy of a word — or a phrase, read straight through."""
-    resp.media = rhymes.word_data(req.params.get("word", ""))
+    return rhymes.word_data(word)
 
 
 @api.route("/api/zipf")
-def word_zipf(req, resp):
+def word_zipf(req, resp, *, word: str = Query("")):
     """Frequency only — no phonetics, no g2p. The ghost's mid-word gate
     needs an instant answer, not a 400ms neural pronunciation."""
-    w = req.params.get("word", "").strip().lower()[:64]
-    resp.media = {"word": w, "zipf": round(zipf_frequency(w, "en"), 2)}
+    w = word.strip().lower()[:64]
+    return {"word": w, "zipf": round(zipf_frequency(w, "en"), 2)}
 
 
 @api.route("/api/lookup")
-def lookup(req, resp):
-    word = req.params.get("word", "")
-    mode = req.params.get("mode", "rhyme")
-    limit = int(req.params.get("limit", "60"))
-    resp.media = rhymes.lookup_data(word, mode=mode, limit=limit)
+def lookup(req, resp, *, word: str = Query(""), mode: str = Query("rhyme"),
+           limit: int = Query(60, ge=1, le=500)):
+    return rhymes.lookup_data(word, mode=mode, limit=limit)
 
 
 @api.route("/api/suggest", methods=["POST"])
 def suggest(req, resp):
     """Rhymes for a word, draft-aware: candidates that echo what the
     draft is about lead the list."""
+    if not edit_limiter.check(req, resp):
+        return
     body = req.media_sync()
-    resp.media = rhymes.suggest_data(body.get("word", ""),
-                                     body.get("text", "")[:rhymes.MAX_DRAFT])
+    return rhymes.suggest_data(body.get("word", ""),
+                               body.get("text", "")[:rhymes.MAX_DRAFT])
 
 
 @api.route("/api/follows")
-def follows(req, resp):
+def follows(req, resp, *, prev: str = Query(""), prev2: str = Query(None)):
     """Words that commonly come right after `prev` (and after the
     two-word context `prev2 prev` when known) — phrase fuel for the
     ghost's ranking. The trigram sees idioms the bigram can't:
     "from time to _time_", not "to _my_"."""
-    w = req.params.get("prev", "").strip().lower()[:64]
+    w = prev.strip().lower()[:64]
     out = {"prev": w, "words": rhymes.get_continuations().get(w, [])}
-    prev2 = req.params.get("prev2")
     if prev2:
         w2 = prev2.strip().lower()[:64]
         out["tri"] = rhymes.get_trigrams().get(f"{w2} {w}", [])
-    resp.media = out
+    return out
 
 OG_PALETTE = ["#e8814a", "#4ea3e8", "#6fd08c", "#d46fb8",
               "#e8c54a", "#9b7ce8", "#e85a5a", "#46cabf",
@@ -229,25 +248,23 @@ def _render_og(d: str) -> bytes:
 
 
 @api.route("/api/og", include_in_schema=False)
-def og_card(req, resp):
-    try:
-        png = _render_og(req.params.get("d", ""))
-    except Exception:
-        resp.status_code = 404
-        resp.text = "bad draft link"
+def og_card(req, resp, *, d: str = Query("")):
+    if not og_limiter.check(req, resp):
         return
-    resp.content = png
-    resp.mimetype = "image/png"
-    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    try:
+        png = _render_og(d)
+    except Exception:
+        return "bad draft link", 404
+    return png, 200, {"Content-Type": "image/png",
+                      "Cache-Control": "public, max-age=31536000, immutable"}
 
 
 INDEX_HTML = (Path(__file__).parent / "static" / "index.html")
 
 
 @api.route("/", include_in_schema=False)
-def index(req, resp):
+def index(req, resp, *, d: str = Query(None)):
     html = INDEX_HTML.read_text()
-    d = req.params.get("d")
     if d:
         try:
             obj = _decode_d(d)
@@ -283,16 +300,16 @@ def index(req, resp):
 
 @api.route("/robots.txt", include_in_schema=False)
 def robots(req, resp):
-    resp.text = ("User-agent: *\n"
-                 "Allow: /\n"
-                 "Sitemap: https://rhymepad.org/sitemap.xml\n")
+    return ("User-agent: *\n"
+            "Allow: /\n"
+            "Sitemap: https://rhymepad.org/sitemap.xml\n")
 
 
 @api.route("/sitemap.xml", include_in_schema=False)
 def sitemap(req, resp):
-    resp.content = ('<?xml version="1.0" encoding="UTF-8"?>\n'
-                    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-                    '  <url><loc>https://rhymepad.org/</loc>'
-                    '<changefreq>weekly</changefreq><priority>1.0</priority></url>\n'
-                    '</urlset>\n').encode("utf-8")
-    resp.mimetype = "application/xml"
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+           '  <url><loc>https://rhymepad.org/</loc>'
+           '<changefreq>weekly</changefreq><priority>1.0</priority></url>\n'
+           '</urlset>\n')
+    return xml.encode("utf-8"), 200, {"Content-Type": "application/xml"}

@@ -15,7 +15,7 @@ Classifier: Topic :: Text Processing :: Linguistic
 Requires-Python: >=3.14
 Description-Content-Type: text/markdown
 License-File: LICENSE
-Requires-Dist: responder>=5.0.0
+Requires-Dist: responder[orjson]>=8.2.1
 Requires-Dist: pronouncing>=0.2
 Requires-Dist: wordfreq>=3.0
 Requires-Dist: g2p-en>=2.1.0

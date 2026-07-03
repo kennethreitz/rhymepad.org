@@ -1,4 +1,4 @@
-responder>=5.0.0
+responder[orjson]>=8.2.1
 pronouncing>=0.2
 wordfreq>=3.0
 g2p-en>=2.1.0

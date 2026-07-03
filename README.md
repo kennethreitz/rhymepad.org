@@ -14,10 +14,11 @@ Live at <https://rhymepad.org>.
 ## Run
 
 ```console
-$ uv run uvicorn app:app --reload
+$ make run
 ```
 
-Then open <http://127.0.0.1:8000>.
+Then open <http://127.0.0.1:8765>. (Under the hood: `uv run granian
+--interface asgi --reload --port 8765 app:api`.)
 
 ## The visual language
 
