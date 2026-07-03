@@ -9,4 +9,5 @@ rhymepad.egg-info/dependency_links.txt
 rhymepad.egg-info/entry_points.txt
 rhymepad.egg-info/requires.txt
 rhymepad.egg-info/top_level.txt
+tests/test_app.py
 tests/test_rhymes.py

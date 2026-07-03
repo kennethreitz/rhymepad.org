@@ -714,7 +714,7 @@ wheels = [
 
 [[package]]
 name = "responder"
-version = "8.2.1"
+version = "8.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "a2wsgi" },
@@ -731,9 +731,9 @@ dependencies = [
     { name = "starlette", extra = ["full"] },
     { name = "uvicorn", extra = ["standard"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cf/e0/9edc32fc6383835f33ba6641b383fd4306639dae135bf9b00ab133336e1c/responder-8.2.1.tar.gz", hash = "sha256:55e0f3479383567bf74c0ba0efc12b35c55424ae18cfe2c5b5f2d317822b2f71", size = 335391, upload-time = "2026-07-03T17:30:12.493Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/db/586ef87d985085a1c11a40966b2d91d819fe84e8a8a3e44e6cbb577e77a1/responder-8.2.2.tar.gz", hash = "sha256:e07d69c69852c852a6b2faa8282fda5c692125fba425db638f8543a3115ace48", size = 336024, upload-time = "2026-07-03T17:59:35.114Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c2/17/dec78e43073c2c0d6669c33056d01bc05c908ac41ce362dc63249712290b/responder-8.2.1-py3-none-any.whl", hash = "sha256:16d451304025e7d28e83ba455f6b76cd8e446903d8227cca15784e0e809a5bc8", size = 185579, upload-time = "2026-07-03T17:30:11.103Z" },
+    { url = "https://files.pythonhosted.org/packages/94/9b/93a5ca1a8d011d2506724a94e4d71eba90114ed6d41568efe4c853cadd95/responder-8.2.2-py3-none-any.whl", hash = "sha256:06268988b06bb461fe1d5214d3b3d6d51d874c2f053d974ed1e9c90ea5c5cb3a", size = 185721, upload-time = "2026-07-03T17:59:33.86Z" },
 ]
 
 [package.optional-dependencies]
@@ -765,7 +765,7 @@ requires-dist = [
     { name = "granian", extras = ["reload"], specifier = ">=2.7.7" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "pronouncing", specifier = ">=0.2" },
-    { name = "responder", extras = ["orjson"], specifier = ">=8.2.1" },
+    { name = "responder", extras = ["orjson"], specifier = ">=8.2.2" },
     { name = "wordfreq", specifier = ">=3.0" },
 ]
 

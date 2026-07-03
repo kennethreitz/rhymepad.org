@@ -49,8 +49,6 @@ api = responder.API(title="RhymePad", static_dir="static", static_route="",
 # per-client keying has to come from X-Forwarded-For.
 # og renders a PIL card per unique payload, so it gets a hard cap; the
 # editor endpoints share a backstop no human typing session can reach.
-# check() is called in-handler rather than via @limiter.limit: the
-# decorator drops the handler's return value, and these handlers return.
 og_limiter = RateLimiter(requests=30, period=60, trust_proxy_headers=True)
 edit_limiter = RateLimiter(requests=600, period=60, trust_proxy_headers=True)
 
@@ -61,9 +59,8 @@ def healthz(req, resp):
 
 
 @api.route("/api/analyze", methods=["POST"])
+@edit_limiter.limit
 def analyze(req, resp):
-    if not edit_limiter.check(req, resp):
-        return
     draft = req.media_sync()
     try:
         return rhymes.analyze_text(draft.get("text", ""))
@@ -92,11 +89,10 @@ def lookup(req, resp, *, word: str = Query(""), mode: str = Query("rhyme"),
 
 
 @api.route("/api/suggest", methods=["POST"])
+@edit_limiter.limit
 def suggest(req, resp):
     """Rhymes for a word, draft-aware: candidates that echo what the
     draft is about lead the list."""
-    if not edit_limiter.check(req, resp):
-        return
     body = req.media_sync()
     return rhymes.suggest_data(body.get("word", ""),
                                body.get("text", "")[:rhymes.MAX_DRAFT])
@@ -248,9 +244,8 @@ def _render_og(d: str) -> bytes:
 
 
 @api.route("/api/og", include_in_schema=False)
+@og_limiter.limit
 def og_card(req, resp, *, d: str = Query("")):
-    if not og_limiter.check(req, resp):
-        return
     try:
         png = _render_og(d)
     except Exception:
