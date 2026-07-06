@@ -18,6 +18,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import responder
+from pydantic import BaseModel, Field
 from responder import Query
 from responder.ext.ratelimit import RateLimiter
 from wordfreq import zipf_frequency
@@ -25,6 +26,15 @@ from wordfreq import zipf_frequency
 import rhymes
 from rhymes import (lookup_data, multis_for,  # noqa: F401  (test surface)
                     rhyme_char_start, word_data)
+
+
+class AnalyzeRequest(BaseModel):
+    text: str = Field("", description="Lyrics or poem text to analyze.")
+
+
+class SuggestRequest(BaseModel):
+    word: str = Field("", description="Target word or phrase to rhyme with.")
+    text: str = Field("", description="Current draft text used for ranking.")
 
 
 @asynccontextmanager
@@ -40,9 +50,13 @@ async def lifespan(app):
 # The body cap covers a MAX_DRAFT draft as JSON (escaping can double it);
 # the timeout is sized for g2p on a draft full of words the dictionary
 # doesn't know, not for the happy path.
-api = responder.API(title="RhymePad", static_dir="static", static_route="",
+api = responder.API(title="RhymePad API", version="0.1.0",
+                    description="Phonetic rhyme analysis and wordplay API.",
+                    static_dir="static", static_route="",
                     sessions=False, lifespan=lifespan,
                     security_headers=True, auto_etag=True,
+                    openapi="3.1.0", openapi_route="/api/openapi.json",
+                    docs_route="/api/docs",
                     max_request_size=512_000, request_timeout=60)
 
 # trust_proxy_headers: the container only ever sees the ingress IP —
@@ -58,12 +72,58 @@ def healthz(req, resp):
     return {"ok": True}
 
 
+@api.route("/api")
+@api.route("/api/")
+def api_index(req, resp):
+    return {
+        "name": "RhymePad API",
+        "docs": "/api/docs",
+        "openapi": "/api/openapi.json",
+        "endpoints": {
+            "analyze": {
+                "method": "POST",
+                "path": "/api/analyze",
+                "body": {"text": "lyrics..."},
+            },
+            "lookup": {
+                "method": "GET",
+                "path": "/api/lookup",
+                "query": {"word": "light", "mode": "rhyme|near|syn|desc|trig"},
+            },
+            "word": {
+                "method": "GET",
+                "path": "/api/word",
+                "query": {"word": "orange"},
+            },
+            "suggest": {
+                "method": "POST",
+                "path": "/api/suggest",
+                "body": {"word": "higher", "text": "draft lyrics..."},
+            },
+            "follows": {
+                "method": "GET",
+                "path": "/api/follows",
+                "query": {"prev": "time", "prev2": "from"},
+            },
+            "zipf": {
+                "method": "GET",
+                "path": "/api/zipf",
+                "query": {"word": "the"},
+            },
+        },
+    }
+
+
+@api.route("/api/docs/", include_in_schema=False)
+def api_docs_slash(req, resp):
+    return "", 307, {"Location": "/api/docs"}
+
+
 @api.route("/api/analyze", methods=["POST"])
 @edit_limiter.limit
-def analyze(req, resp):
-    draft = req.media_sync()
+def analyze(req, resp, draft: AnalyzeRequest):
     try:
-        return rhymes.analyze_text(draft.get("text", ""))
+        return rhymes.analyze_text(draft.text)
     except ValueError:
         return {"detail": "draft too large"}, 413
 
@@ -90,12 +150,10 @@ def lookup(req, resp, *, word: str = Query(""), mode: str = Query("rhyme"),
 
 @api.route("/api/suggest", methods=["POST"])
 @edit_limiter.limit
-def suggest(req, resp):
+def suggest(req, resp, body: SuggestRequest):
     """Rhymes for a word, draft-aware: candidates that echo what the
     draft is about lead the list."""
-    body = req.media_sync()
-    return rhymes.suggest_data(body.get("word", ""),
-                               body.get("text", "")[:rhymes.MAX_DRAFT])
+    return rhymes.suggest_data(body.word, body.text[:rhymes.MAX_DRAFT])
 
 
 @api.route("/api/follows")

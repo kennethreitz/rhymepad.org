@@ -31,6 +31,46 @@ def test_healthz(client):
     assert r.json() == {"ok": True}
 
 
+def test_api_index(client):
+    r = client.get("/api")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"] == "RhymePad API"
+    assert body["docs"] == "/api/docs"
+    assert body["openapi"] == "/api/openapi.json"
+    assert body["endpoints"]["analyze"]["path"] == "/api/analyze"
+
+
+def test_api_index_trailing_slash(client):
+    r = client.get("/api/")
+    assert r.status_code == 200
+    assert r.json()["endpoints"]["lookup"]["path"] == "/api/lookup"
+
+
+def test_api_docs(client):
+    r = client.get("/api/docs")
+    assert r.status_code == 200
+    assert "RhymePad API" in r.text
+    assert "/api/openapi.json" in r.text
+
+
+def test_api_docs_trailing_slash(client):
+    r = client.get("/api/docs/")
+    assert r.status_code in (200, 307)
+
+
+def test_openapi_schema(client):
+    r = client.get("/api/openapi.json")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["openapi"] == "3.1.0"
+    assert "/api/analyze" in body["paths"]
+    assert "/api/lookup" in body["paths"]
+    analyze = body["paths"]["/api/analyze"]["post"]
+    schema = analyze["requestBody"]["content"]["application/json"]["schema"]
+    assert schema == {"$ref": "#/components/schemas/AnalyzeRequest"}
+
+
 def test_analyze(client):
     r = client.post("/api/analyze", json={"text": "cat in a hat\nbat on a mat"})
     assert r.status_code == 200
