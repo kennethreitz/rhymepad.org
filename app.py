@@ -276,9 +276,9 @@ def _render_og(d: str) -> bytes:
                                  radius=7, fill=gcolor[t["g"]] + (alpha,))
         # base text — headers bold-bright, annotations dim, lyric ink
         if line.lstrip().startswith("#"):
-            dr.text((PAD, y), line, font=hdr_f, fill=(138, 125, 108))
+            dr.text((PAD, y), line, font=hdr_f, fill=(168, 152, 132))
         elif line.lstrip()[:1] in "[":
-            dr.text((PAD, y), line, font=body, fill=(106, 95, 82))
+            dr.text((PAD, y), line, font=body, fill=(148, 134, 117))
         else:
             dr.text((PAD, y), line, font=body, fill=OG_INK)
             # tinted rhyming words over the ink, like the editor

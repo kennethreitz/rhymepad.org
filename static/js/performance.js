@@ -51,14 +51,19 @@ let userTempo = 90;
 
 const beatGrid = document.getElementById('beatGrid');
 Object.entries(PATTERNS).forEach(([name,p])=>{
-  const d=document.createElement('div'); d.className='beat'; d.dataset.name=name;
+  const d=document.createElement('button'); d.type='button'; d.className='beat'; d.dataset.name=name;
+  d.setAttribute('aria-pressed', 'false');
   d.innerHTML = `<div class="name">${name}</div><div class="bpm">${p.bpm} BPM feel</div>`;
   d.addEventListener('click', ()=>{
     current=name;
     document.getElementById('tempo').value = p.bpm;
     setTempo(p.bpm);
     if(!playing) startBeat();
-    document.querySelectorAll('.beat').forEach(b=>b.classList.toggle('playing', b.dataset.name===name));
+    document.querySelectorAll('.beat').forEach(b=>{
+      const on = b.dataset.name===name;
+      b.classList.toggle('playing', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
   });
   beatGrid.appendChild(d);
 });

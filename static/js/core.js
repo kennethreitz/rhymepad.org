@@ -164,21 +164,27 @@ function renderTabs(){
   docsState.docs.forEach(doc=>{
     const tab = document.createElement('div');
     tab.className = 'dtab' + (doc.id === docsState.current ? ' active' : '');
-    const title = document.createElement('span');
+    if(doc.id === docsState.current) tab.setAttribute('aria-current', 'true');
+    const title = document.createElement('button');
+    title.type = 'button';
     title.className = 'dtitle';
     title.textContent = doc.title || 'Untitled';
+    title.addEventListener('click', ()=>{ if(doc.id !== docsState.current) openDoc(doc.id); });
     tab.appendChild(title);
     if(doc.id === docsState.current && docsState.docs.length > 1){
-      const x = document.createElement('span');
+      const x = document.createElement('button');
+      x.type = 'button';
       x.className = 'x'; x.textContent = '×'; x.title = 'Delete this draft';
+      x.setAttribute('aria-label', `Delete ${doc.title || 'Untitled'}`);
       x.addEventListener('click', e=>{ e.stopPropagation(); deleteDoc(doc.id); });
       tab.appendChild(x);
     }
-    tab.addEventListener('click', ()=>{ if(doc.id !== docsState.current) openDoc(doc.id); });
     draftsBar.appendChild(tab);
   });
-  const plus = document.createElement('div');
+  const plus = document.createElement('button');
+  plus.type = 'button';
   plus.className = 'dtab new'; plus.textContent = '+'; plus.title = 'New draft';
+  plus.setAttribute('aria-label', 'New draft');
   plus.addEventListener('click', newDoc);
   draftsBar.appendChild(plus);
 }
@@ -502,7 +508,7 @@ function buildReadout(){
   // the stats bar is gone — this element only ever speaks up when the
   // engine is unreachable (and hosts the transient "saved" flash)
   schemeReadout.innerHTML = backendOk ? ''
-    : '<span class="offline">backend offline — run: uv run uvicorn app:app</span>';
+    : '<span class="offline">backend offline — run make run</span>';
 }
 
 const sampleChip = document.getElementById('sampleChip');
@@ -1056,6 +1062,12 @@ editor.addEventListener('dblclick', lookupSelection);
 if(window.matchMedia('(pointer: coarse)').matches){
   const _lh = document.getElementById('lookupHint');
   if(_lh) _lh.innerHTML = 'tip: <b>select any word</b> in your draft to look it up here';
+  editor.placeholder = 'Start writing. Leave a blank line between stanzas.\n'
+    + 'Rhymes are detected phonetically — same color = same sound.\n'
+    + 'Line endings glow strongest; internal rhymes sit softer.\n'
+    + 'Select any word to look it up below.';
+  const emptyCopy = document.querySelector('#lookupResults .muted');
+  if(emptyCopy) emptyCopy.textContent = 'Type a word — or select one in your draft — and its whole entry appears: how it sounds, what describes it, what rhymes, what could replace it.';
   // no double-click on touch — long-press word selection does the job
   editor.addEventListener('select', debounce(()=>{
     const len = editor.selectionEnd - editor.selectionStart;
@@ -1102,7 +1114,7 @@ function lookupFor(word){
 function renderHistory(){
   const past = wordHistory.filter(w=>w !== curWord).slice(-5).reverse();
   histBar.innerHTML = past.length
-    ? '↩ ' + past.map(w=>`<span class="hist" data-w="${esc(w)}">${esc(w)}</span>`).join(' · ')
+    ? '↩ ' + past.map(w=>`<button type="button" class="hist" data-w="${esc(w)}">${esc(w)}</button>`).join(' · ')
     : '';
   histBar.querySelectorAll('.hist').forEach(el=>
     el.addEventListener('click', ()=> lookupFor(el.dataset.w)));
@@ -1122,8 +1134,8 @@ async function doLookup(){
   renderHistory();
   const seq = ++lookupSeq;
   defBox.innerHTML = `<div class="defhead"><b>${esc(word)}</b></div>` +
-    `<div class="muted defphon" id="defPhon">…</div>`;
-  resultsBox.innerHTML = '<p class="muted">gathering…</p>';
+    `<div class="muted defphon pending" id="defPhon">…</div>`;
+  resultsBox.innerHTML = '<p class="muted pending">gathering…</p>';
   // rhymes go draft-aware when there's a draft to be aware of
   const rhymeReq = editor.value.trim()
     ? fetch('/api/suggest', {method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -1180,7 +1192,7 @@ function chipHtml(items, cls){
       const ch = d.chime === 'perfect' ? ' chime' : (d.chime === 'near' ? ' chime soft' : '');
       const fit = d.fit ? ' fits' : '';
       const tip = d.fit ? ` title="echoes “${esc(d.fit)}” in your draft"` : '';
-      return `<span class="chip${cls ? ' ' + cls : ''}${r}${used}${ch}${fit}" data-w="${esc(w)}"${tip}>${esc(w)}</span>`;
+      return `<button type="button" class="chip${cls ? ' ' + cls : ''}${r}${used}${ch}${fit}" data-w="${esc(w)}"${tip}>${esc(w)}</button>`;
     }).join('') + '</div>';
 }
 
@@ -1559,9 +1571,17 @@ if(navigator.share){
   history.replaceState(null, '', location.pathname);
 })();
 // drop a .txt (or any text file) anywhere -> it becomes a new draft
-document.addEventListener('dragover', e=>{ e.preventDefault(); });
+document.addEventListener('dragover', e=>{
+  e.preventDefault();
+  if(e.dataTransfer && [...e.dataTransfer.types].includes('Files'))
+    editorShell.classList.add('dropping');
+});
+document.addEventListener('dragleave', e=>{
+  if(!e.relatedTarget) editorShell.classList.remove('dropping');
+});
 document.addEventListener('drop', async e=>{
   e.preventDefault();
+  editorShell.classList.remove('dropping');
   const files = [...(e.dataTransfer?.files || [])].slice(0, 8);
   for(const f of files){
     if(f.size > 1024 * 1024) continue;
@@ -1598,7 +1618,7 @@ document.addEventListener('keydown', e=>{
   if(e.key === 's'){
     e.preventDefault();  // it's already saved — say so
     const prev = schemeReadout.innerHTML;
-    schemeReadout.innerHTML = 'saved ✓';
+    schemeReadout.innerHTML = '<span class="note">saved ✓</span>';
     setTimeout(buildReadout, 900);
   }else if(e.key === 'k'){
     e.preventDefault();
